@@ -19,15 +19,9 @@ const HighlightProducts = () => {
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-
       const data = await response.json();
-
-      // Handle both direct array and nested products array
       const productsArray = data.products || data;
-
-      // ✅ Filter only highlight products
       const highlightProducts = productsArray.filter((p) => p.highlight === true);
-
       setProducts(highlightProducts);
       setError(null);
     } catch (err) {
@@ -67,7 +61,6 @@ const HighlightProducts = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <section className="bg-white py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center">
@@ -83,8 +76,6 @@ const HighlightProducts = () => {
           </div>
         </div>
       </section>
-
-      {/* Products Grid */}
       <section className="bg-gray-50 py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {products.length === 0 ? (
@@ -116,11 +107,6 @@ const HighlightProducts = () => {
                           <span className="text-xs text-blue-600 font-medium bg-blue-50 px-2 py-1 rounded">
                             {product.category}
                           </span>
-                          <span className="text-xs text-gray-500">
-                            {product.count > 0
-                              ? `${product.count} in stock`
-                              : "Out of stock"}
-                          </span>
                         </div>
                         <h3 className="font-medium text-gray-900 mb-2 line-clamp-2">
                           {product.name}
@@ -132,20 +118,6 @@ const HighlightProducts = () => {
                           ₹{product.price.toLocaleString()}
                         </p>
                       </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          console.log(`Added ${product.name} to cart`);
-                        }}
-                        disabled={product.count === 0 || !product.isActive}
-                        className={`w-full py-2.5 px-4 rounded-full text-sm font-medium transition-colors ${
-                          product.count === 0 || !product.isActive
-                            ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                            : "bg-black text-white hover:bg-gray-800"
-                        }`}
-                      >
-                        {product.count === 0 ? "Out of Stock" : "Add to Cart"}
-                      </button>
                     </div>
                   </div>
                 </div>

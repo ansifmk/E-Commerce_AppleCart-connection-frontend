@@ -6,53 +6,59 @@ export const AuthContext = createContext();
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
 
-  // Load user from localStorage on app start
   useEffect(() => {
-    const storedUser = localStorage.getItem("user");
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
+    const savedUser = localStorage.getItem("user");
+    if (savedUser) {
+      setUser(JSON.parse(savedUser));
     }
   }, []);
 
-  // 🔐 Login function with axios + block + role check
   const login = async (email, password) => {
     try {
-      const res = await axios.get(`http://localhost:3001/users?email=${email}`);
+      if (!email || !password) {
+        throw new Error("Email and password are required");
+      }
 
+      const cleanEmail = email.trim().toLowerCase();
+      const res = await axios.get(`http://localhost:3001/users?email=${cleanEmail}`);
       if (res.data.length === 0) {
         throw new Error("User not found");
       }
-
-      const foundUser = res.data[0];
-
-      // Check blocked
-      if (foundUser.isBlock === true) {
-        throw new Error("Your account has been blocked. Contact admin.");
+     const foundUser = res.data[0];
+      if (foundUser.email.toLowerCase() !== cleanEmail) {
+        throw new Error("Invalid email");
       }
-
-      // Check password
       if (foundUser.password !== password) {
         throw new Error("Invalid password");
       }
-
-      // ✅ Save user with role
+      if (foundUser.isBlock) {
+        throw new Error("Your account has been blocked. Contact admin.");
+      }
       setUser(foundUser);
       localStorage.setItem("user", JSON.stringify(foundUser));
 
       return { success: true, user: foundUser };
     } catch (err) {
-      return { success: false, message: err.message };
+      return { success: false, message: err.message || "Login failed" };
     }
   };
-
-  // 🚪 Logout function
   const logout = () => {
     setUser(null);
     localStorage.removeItem("user");
   };
+  const refreshUser = async () => {
+    if (!user) return;
+    try {
+      const res = await axios.get(`http://localhost:3001/users/${user.id}`);
+      setUser(res.data);
+      localStorage.setItem("user", JSON.stringify(res.data));
+    } catch (err) {
+      console.error("Error refreshing user:", err);
+    }
+  };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, setUser, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );
