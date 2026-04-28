@@ -5,12 +5,14 @@ import { AuthContext } from "../../Context/Authcontext";
 
 function Register() {
   const { user } = useContext(AuthContext); 
+
   const [formData, setFormData] = useState({
-    name: "",
+    username: "",   // ✅ DIRECT MATCH
     email: "",
     password: "",
-    confirmPassword: ""
+    phoneNumber: "" // ✅ REQUIRED
   });
+
   const [message, setMessage] = useState({ text: "", type: "" });
   const navigate = useNavigate();
 
@@ -25,14 +27,12 @@ function Register() {
   }, [user, navigate]);
 
   const validateForm = () => {
-    const { name, email, password, confirmPassword } = formData;
+    const { username, email, password, phoneNumber } = formData;
 
-    if (!name || !email || !password || !confirmPassword) {
+    if (!username || !email || !password || !phoneNumber) {
       return { text: "All fields are required", type: "error" };
     }
-    if (password !== confirmPassword) {
-      return { text: "Passwords do not match!", type: "error" };
-    }
+
     return null;
   };
 
@@ -50,37 +50,31 @@ function Register() {
     }
 
     try {
-      const { name, email, password } = formData;
+      const res = await axios.post(
+        "https://localhost:7096/api/auth/register",
+        formData   // ✅ DIRECTLY SEND
+      );
 
-      const res = await axios.get(`http://localhost:3001/users?email=${email}`);
-      if (res.data.length > 0) {
-        setMessage({ text: "Email already registered", type: "error" });
-        return;
-      }
-
-      const newUser = {
-        name,
-        email,
-        password,
-        role: "user",
-        isBlock: false,
-        cart: [],
-        orders: [],
-        wishlist: [],
-        created_at: new Date().toISOString()
-      };
-
-      await axios.post("http://localhost:3001/users", newUser);
       setMessage({ text: "Registration successful", type: "success" });
 
       setTimeout(() => {
         navigate("/login");
       }, 1000);
 
-      setFormData({ name: "", email: "", password: "", confirmPassword: "" });
+      setFormData({
+        username: "",
+        email: "",
+        password: "",
+        phoneNumber: ""
+      });
+
     } catch (err) {
-      console.error(err);
-      setMessage({ text: "Error registering user", type: "error" });
+      console.error("ERROR:", err.response?.data);
+
+      setMessage({
+        text: err.response?.data?.message || "Registration failed",
+        type: "error"
+      });
     }
   };
 
@@ -91,35 +85,48 @@ function Register() {
           <h1 className="text-lg font-bold text-white">Apple</h1>
         </div>
       </header>
+
       <main className="flex-grow flex items-center justify-center py-8 px-4">
         <div className="max-w-md w-full">
+
           <div className="text-center mb-8">
-            <h2 className="text-2xl font-light text-white mb-2">Create your account</h2>
-            <p className="text-white text-lg font-light mb-4">One account for everything Apple.</p>
-            <p className="text-gray-300 font-normal">Join the Apple family</p>
+            <h2 className="text-2xl font-light text-white mb-2">
+              Create your account
+            </h2>
+            <p className="text-white text-lg font-light mb-4">
+              One account for everything Apple.
+            </p>
+            <p className="text-gray-300 font-normal">
+              Join the Apple family
+            </p>
           </div>
 
           <div className="bg-gray-800 rounded-lg p-8 mb-6">
             <form onSubmit={handleSubmit}>
+
               {message.text && (
                 <div className={`mb-4 p-3 rounded-md ${
-                  message.type === "success" 
-                    ? "bg-green-900/50 border border-green-700 text-green-400" 
+                  message.type === "success"
+                    ? "bg-green-900/50 border border-green-700 text-green-400"
                     : "bg-red-900/50 border border-red-700 text-red-400"
                 }`}>
                   <p className="text-sm">{message.text}</p>
                 </div>
               )}
-          <div className="mb-6">
+
+              {/* USERNAME */}
+              <div className="mb-6">
                 <input
                   type="text"
-                  name="name"
-                  placeholder="Full name"
-                  value={formData.name}
+                  name="username"
+                  placeholder="Username"
+                  value={formData.username}
                   onChange={handleChange}
-                  className="w-full px-0 py-3 bg-transparent border-0 border-b-2 border-gray-600 focus:border-blue-500 text-white placeholder-gray-400 focus:outline-none transition-colors"
+                  className="w-full py-3 bg-transparent border-b-2 border-gray-600 focus:border-blue-500 text-white placeholder-gray-400 focus:outline-none"
                 />
               </div>
+
+              {/* EMAIL */}
               <div className="mb-6">
                 <input
                   type="email"
@@ -127,49 +134,55 @@ function Register() {
                   placeholder="Email address"
                   value={formData.email}
                   onChange={handleChange}
-                  className="w-full px-0 py-3 bg-transparent border-0 border-b-2 border-gray-600 focus:border-blue-500 text-white placeholder-gray-400 focus:outline-none transition-colors"
+                  className="w-full py-3 bg-transparent border-b-2 border-gray-600 focus:border-blue-500 text-white placeholder-gray-400 focus:outline-none"
                 />
               </div>
+
+              {/* PHONE */}
               <div className="mb-6">
+                <input
+                  type="text"
+                  name="phoneNumber"
+                  placeholder="Phone Number"
+                  value={formData.phoneNumber}
+                  onChange={handleChange}
+                  className="w-full py-3 bg-transparent border-b-2 border-gray-600 focus:border-blue-500 text-white placeholder-gray-400 focus:outline-none"
+                />
+              </div>
+
+              {/* PASSWORD */}
+              <div className="mb-8">
                 <input
                   type="password"
                   name="password"
                   placeholder="Password"
                   value={formData.password}
                   onChange={handleChange}
-                  className="w-full px-0 py-3 bg-transparent border-0 border-b-2 border-gray-600 focus:border-blue-500 text-white placeholder-gray-400 focus:outline-none transition-colors"
+                  className="w-full py-3 bg-transparent border-b-2 border-gray-600 focus:border-blue-500 text-white placeholder-gray-400 focus:outline-none"
                 />
               </div>
-              <div className="mb-8">
-                <input
-                  type="password"
-                  name="confirmPassword"
-                  placeholder="Confirm Password"
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                  className="w-full px-0 py-3 bg-transparent border-0 border-b-2 border-gray-600 focus:border-blue-500 text-white placeholder-gray-400 focus:outline-none transition-colors"
-                />
-              </div>
+
               <button
                 type="submit"
-                className="w-full py-4 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-full"
               >
                 Create Account
               </button>
             </form>
-            <div className="mt-6 text-center">
-              <p className="text-sm text-gray-400">
-                Already have an account?{" "}
-                <button
-                  onClick={() => navigate("/login")}
-                  className="text-blue-400 hover:text-blue-300 underline bg-transparent border-none cursor-pointer"
-                >
-                  Sign in
-                </button>
-              </p>
-            </div>
+<div className="text-center mt-6">
+  <p className="text-gray-400 text-sm">
+    Already have an account?{" "}
+    <span
+      onClick={() => navigate("/login")}
+      className="text-blue-500 cursor-pointer hover:underline"
+    >
+      Login here
+    </span>
+  </p>
+</div>
           </div>
         </div>
+        
       </main>
     </div>
   );

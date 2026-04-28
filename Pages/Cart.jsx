@@ -1,117 +1,158 @@
-import React, { useContext, useState } from "react";
+import React, { useContext, useState, useEffect } from "react";
 import { AuthContext } from "../Context/Authcontext";
-import axios from "axios";
+import axios from "../api/axiosInstance";
 import { useNavigate } from "react-router-dom";
 
 const Cart = () => {
-  const { user, setUser } = useContext(AuthContext);
+  const [cartItems, setCartItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const { user ,fetchCartCount} = useContext(AuthContext);
   const [updating, setUpdating] = useState({});
   const [limitReached, setLimitReached] = useState({});
   const navigate = useNavigate();
 
-  if (!user || !user.cart || user.cart.length === 0) {
+  useEffect(() => {
+    fetchCart();
+  }, []);
+
+
+  const updateQuantity = async (productId, newQty) => {
+  try {
+    if (newQty < 1) return; // prevent 0 or negative
+
+    await axios.put("/api/Cart/Update", {
+      productId: productId,
+      quantity: newQty
+    });
+
+    // 🔥 update UI instantly
+    setCartItems(prev =>
+      prev.map(item =>
+        item.id === productId
+          ? { ...item, quantity: newQty }
+          : item
+      )
+    );
+
+    // 🔥 update navbar count
+    fetchCartCount();
+
+  } catch (err) {
+    console.error("Update error:", err);
+  }
+};
+  const getToken = () => {
+    return (
+      localStorage.getItem("token") ||
+      JSON.parse(localStorage.getItem("user"))?.token
+    );
+  };
+
+  // ✅ FETCH CART
+const fetchCart = async () => {
+  try {
+    const token =
+      localStorage.getItem("token") ||
+      JSON.parse(localStorage.getItem("user"))?.token;
+
+    console.log("TOKEN:", token);
+
+    const res = await axios.get(
+      "https://localhost:7096/api/Cart/GetCartItems",
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        withCredentials: true,
+      }
+    );
+
+    console.log("FULL RESPONSE:", res.data);
+
+    // 🔥 STEP 1: extract items safely
+    let items = [];
+
+    if (Array.isArray(res.data)) {
+      items = res.data;
+    } else if (Array.isArray(res.data.data)) {
+      items = res.data.data;
+    } else if (Array.isArray(res.data.data?.items)) {
+      items = res.data.data.items;
+    }
+
+    console.log("EXTRACTED ITEMS:", items);
+
+    // 🔥 STEP 2: map safely
+    const formatted = items.map((item) => ({
+      id: item.productId || item.id,
+      name: item.productName || item.name,
+      price: item.price || 0,
+      quantity: item.quantity || 1,
+      images: item.thumbnail
+        ? [item.thumbnail]
+        : item.images || [],
+      description: item.description || "",
+    }));
+
+    console.log("FORMATTED:", formatted);
+
+    setCartItems(formatted);
+  } catch (err) {
+    console.error("Cart fetch error:", err);
+  } finally {
+    setLoading(false);
+  }
+};
+
+  // ✅ REMOVE ITEM
+  const removeFromCart = async (productId) => {
+    try {
+      const token = getToken();
+
+      await axios.delete(
+        `https://localhost:7096/api/Cart/${productId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          withCredentials: true,
+        }
+      );
+
+      // 🔥 update UI instantly
+      setCartItems((prev) =>
+        prev.filter((item) => item.id !== productId)
+      );
+      fetchCartCount();
+    } catch (err) {
+      console.error("Remove error:", err);
+    }
+  };
+
+  const totalPrice = cartItems.reduce(
+    (sum, item) => sum + item.price * item.quantity,
+    0
+  );
+
+  // ✅ LOADING
+  if (loading) {
+    return <p className="text-center mt-10">Loading cart...</p>;
+  }
+
+  // ✅ EMPTY CART
+  if (cartItems.length === 0) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 space-y-4">
         <button
           onClick={() => navigate("/products")}
-          className="bg-black text-white px-6 py-2 rounded-full shadow-md hover:bg-gray-800 transition"
+          className="bg-black text-white px-6 py-2 rounded-full"
         >
           Back to Products
         </button>
-        <p className="text-gray-600 text-lg">Your cart is empty 🛒</p>
+        <p>Your cart is empty 🛒</p>
       </div>
     );
   }
-
-  const updateCartItem = async (productId, delta) => {
-    setUpdating((prev) => ({ ...prev, [productId]: true }));
-    setLimitReached((prev) => ({ ...prev, [productId]: false }));
-
-    try {
-      const cartItem = user.cart.find((item) => item.id === productId);
-      if (!cartItem) return;
-
-      let updatedQuantity = cartItem.quantity + delta;
-      if (updatedQuantity > 10) {
-        updatedQuantity = 10;
-        setLimitReached((prev) => ({ ...prev, [productId]: true }));
-      }
-
-      const updatedCart =
-        updatedQuantity <= 0
-          ? user.cart.filter((item) => item.id !== productId)
-          : user.cart.map((item) =>
-              item.id === productId
-                ? { ...item, quantity: updatedQuantity }
-                : item
-            );
-
-      const productRes = await axios.get(
-        `http://localhost:3001/products/${productId}`
-      );
-      const product = productRes.data;
-      const appliedDelta = updatedQuantity - cartItem.quantity;
-      const updatedCount = Math.max(product.count - appliedDelta, 0);
-
-      await Promise.all([
-        axios.patch(`http://localhost:3001/users/${user.id}`, {
-          cart: updatedCart,
-        }),
-        axios.patch(`http://localhost:3001/products/${productId}`, {
-          count: updatedCount,
-        }),
-      ]);
-
-      const updatedUser = { ...user, cart: updatedCart };
-      setUser(updatedUser);
-      localStorage.setItem("user", JSON.stringify(updatedUser));
-    } catch (err) {
-      console.error("Error updating cart:", err);
-      alert("Failed to update cart. Please try again.");
-    } finally {
-      setUpdating((prev) => ({ ...prev, [productId]: false }));
-    }
-  };
-
-  const removeFromCart = async (productId) => {
-    setUpdating((prev) => ({ ...prev, [productId]: true }));
-
-    try {
-      const cartItem = user.cart.find((item) => item.id === productId);
-      if (!cartItem) return;
-
-      const productRes = await axios.get(
-        `http://localhost:3001/products/${productId}`
-      );
-      const product = productRes.data;
-      const updatedCount = product.count + cartItem.quantity;
-
-      const updatedCart = user.cart.filter((item) => item.id !== productId);
-
-      await Promise.all([
-        axios.patch(`http://localhost:3001/users/${user.id}`, {
-          cart: updatedCart,
-        }),
-        axios.patch(`http://localhost:3001/products/${productId}`, {
-          count: updatedCount,
-        }),
-      ]);
-
-      const updatedUser = { ...user, cart: updatedCart };
-      setUser(updatedUser);
-      localStorage.setItem("user", JSON.stringify(updatedUser));
-    } catch (err) {
-      console.error("Error removing from cart:", err);
-      alert("Failed to remove from cart. Please try again.");
-    } finally {
-      setUpdating((prev) => ({ ...prev, [productId]: false }));
-    }
-  };
-
-  const totalPrice = user.cart.reduce(
-    (sum, item) => sum + item.price * item.quantity,
-    0
-  );
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
@@ -132,7 +173,7 @@ const Cart = () => {
             </div>
 
             <div className="divide-y divide-gray-200">
-              {user.cart.map((item) => (
+              {cartItems.map((item) => (
                 <div key={item.id} className="p-6">
                   <div className="flex gap-4">
                     <div className="w-20 h-20 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
@@ -163,28 +204,29 @@ const Cart = () => {
 
                       <div className="flex justify-between items-center mt-4">
                         <div className="flex items-center gap-2 relative">
-                          <button
-                            onClick={() => updateCartItem(item.id, -1)}
-                            disabled={updating[item.id]}
-                            className="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-md hover:bg-gray-200 transition text-gray-600"
-                          >
-                            -
-                          </button>
-                          <span className="px-3 text-gray-700 font-medium">
-                            {item.quantity}
-                          </span>
-                          <button
-                            onClick={() => updateCartItem(item.id, 1)}
-                            disabled={updating[item.id] || item.quantity >= 10}
-                            className="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-md hover:bg-gray-200 transition text-gray-600"
-                          >
-                            +
-                          </button>
-                          {limitReached[item.id] && (
-                            <span className="absolute top-10 left-0 text-xs text-red-600 font-medium">
-                              Maximum quantity reached
-                            </span>
-                          )}
+                         <button
+  onClick={() =>
+    updateQuantity(item.id, item.quantity - 1)
+  }
+  disabled={item.quantity <= 1}
+  className="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-md"
+>
+  -
+</button>
+
+<span className="px-3 text-gray-700 font-medium">
+  {item.quantity}
+</span>
+
+<button
+  onClick={() =>
+    updateQuantity(item.id, item.quantity + 1)
+  }
+  disabled={item.quantity >= 10}
+  className="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-md"
+>
+  +
+</button>
                         </div>
 
                         <button
@@ -222,7 +264,7 @@ const Cart = () => {
                 className="w-full bg-black text-white px-6 py-3 rounded-lg font-semibold shadow-sm hover:bg-gray-800 transition mt-6"
               >
                 Proceed to Checkout
-              </button>
+              </ button>
             </div>
           </div>
         </div>

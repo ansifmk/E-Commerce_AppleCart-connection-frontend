@@ -1,15 +1,15 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-
+import { useLocation } from "react-router-dom";
 const OrderSuccess = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [animationStage, setAnimationStage] = useState(0);
-
+const [orderNumber, setOrderNumber] = useState("");
   useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
     setAnimationStage(1);
-    
     const timer2 = setTimeout(() => setAnimationStage(2), 1000);
-    
     const timer3 = setTimeout(() => setAnimationStage(3), 1500);
 
     return () => {
@@ -17,92 +17,166 @@ const OrderSuccess = () => {
       clearTimeout(timer3);
     };
   }, []);
-
+useEffect(() => {
+  if (location.state?.orderNumber) {
+    setOrderNumber(location.state.orderNumber);
+  }
+}, [location.state]);
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center px-4 sm:px-6 lg:px-8">
-      <div className="max-w-lg w-full">
-              <div className={`bg-white/80 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/60 p-8 sm:p-10 transition-all duration-700 ${
-          animationStage >= 2 ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'
-        }`}>
-                    <div className="text-center mb-8">
-            <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-gray-900 to-blue-900 bg-clip-text text-transparent mb-4 transition-all duration-500 delay-200">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-8">
+      <div className="max-w-md w-full">
+        {/* Success Card */}
+        <div
+          className={`bg-white rounded-2xl shadow-lg overflow-hidden transition-all duration-500 ${
+            animationStage >= 2
+              ? "translate-y-0 opacity-100"
+              : "translate-y-8 opacity-0"
+          }`}
+        >
+          {/* Top Section */}
+          <div className="px-6 pt-8 pb-6 text-center border-b border-gray-100">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-green-50 rounded-full mb-4">
+              <svg
+                className="w-8 h-8 text-green-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M5 13l4 4L19 7"
+                />
+              </svg>
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-1">
               Order Confirmed!
             </h1>
-            <div className="w-20 h-1 bg-gradient-to-r from-green-400 to-blue-400 mx-auto rounded-full mb-6 transition-all duration-500 delay-300"></div>
-            <p className="text-lg text-gray-600 leading-relaxed transition-all duration-500 delay-400">
-              Thank you for your trust in us. Your order <span className="font-semibold text-gray-900">#ORD-7842</span> has been confirmed and is being processed.
+            <p className="text-sm text-gray-500">Thank you for your purchase</p>
+          </div>
+
+          {/* Content */}
+          <div className="px-6 py-5">
+            {/* Order Number */}
+            {/* <div className="text-center mb-5">
+              <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
+                Order Number
+              </p>
+              <p className="text-lg font-mono font-semibold text-gray-900">
+                #ORD-7842
+              </p>
+            </div> */}
+
+            {/* Simple Timeline */}
+            <div className="mb-5 bg-gray-50 rounded-xl p-4">
+              <div className="flex items-center justify-between">
+                <div className="text-center flex-1">
+                  <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center mx-auto mb-2">
+                    <svg
+                      className="w-4 h-4 text-white"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M5 13l4 4L19 7"
+                      />
+                    </svg>
+                  </div>
+                  <p className="text-xs font-medium text-gray-900">Confirmed</p>
+                  <p className="text-xs text-gray-500">Just now</p>
+                </div>
+                <div className="flex-1 h-px bg-gray-300"></div>
+                <div className="text-center flex-1">
+                  <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-2">
+                    <svg
+                      className="w-4 h-4 text-gray-500"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                      />
+                    </svg>
+                  </div>
+                  <p className="text-xs font-medium text-gray-600">
+                    Processing
+                  </p>
+                </div>
+                <div className="flex-1 h-px bg-gray-200"></div>
+                <div className="text-center flex-1">
+                  <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-2">
+                    <svg
+                      className="w-4 h-4 text-gray-500"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-1.5 6M17 13l1.5 6M9 21h6M12 18v3"
+                      />
+                    </svg>
+                  </div>
+                  <p className="text-xs font-medium text-gray-600">Shipped</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Buttons */}
+            <div
+              className={`space-y-3 transition-all duration-500 ${
+                animationStage >= 3
+                  ? "translate-y-0 opacity-100"
+                  : "translate-y-4 opacity-0"
+              }`}
+            >
+              <button
+                onClick={() => navigate("/products")}
+                className="w-full bg-gray-900 text-white px-4 py-2.5 rounded-xl font-medium hover:bg-gray-800 transition-colors text-sm"
+              >
+                Continue Shopping
+              </button>
+              <button
+                onClick={() => navigate("/my-orders")}
+                className="w-full border border-gray-300 text-gray-700 px-4 py-2.5 rounded-xl font-medium hover:bg-gray-50 transition-colors text-sm"
+              >
+                View My Orders
+              </button>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 text-center">
+            <p className="text-xs text-gray-500">
+              Confirmation sent to your email
             </p>
           </div>
-          <div className="mb-8 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-blue-100 transition-all duration-500 delay-500">
-            <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
-              <svg className="w-5 h-5 text-blue-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
-              </svg>
-              Order Timeline
-            </h3>
-            <div className="space-y-3">
-              <div className="flex items-center transition-transform duration-300 delay-600">
-                <div className="w-3 h-3 bg-green-500 rounded-full border-4 border-white shadow"></div>
-                <span className="ml-3 text-sm font-medium text-gray-900">Order Confirmed</span>
-                <span className="ml-auto text-xs text-gray-500">Just now</span>
-              </div>
-              <div className="flex items-center transition-transform duration-300 delay-700">
-                <div className="w-3 h-3 bg-blue-300 rounded-full border-4 border-white shadow"></div>
-                <span className="ml-3 text-sm text-gray-600">Processing</span>
-                <span className="ml-auto text-xs text-gray-400">Next</span>
-              </div>
-              <div className="flex items-center transition-transform duration-300 delay-800">
-                <div className="w-3 h-3 bg-gray-300 rounded-full border-4 border-white shadow"></div>
-                <span className="ml-3 text-sm text-gray-600">Shipped</span>
-              </div>
-            </div>
-          </div>
-          <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 transition-all duration-500 ${
-            animationStage >= 3 ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'
-          }`}>
-            <button
-              onClick={() => navigate("/products")}
-              className="group bg-gradient-to-r from-gray-900 to-blue-900 text-white px-6 py-4 rounded-xl font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 flex items-center justify-center"
-            >
-              Continue Shopping
-              <svg className="w-5 h-5 ml-2 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-              </svg>
-            </button>
-            <button
-              onClick={() => navigate("/my-orders")}
-              className="group bg-white text-gray-900 px-6 py-4 rounded-xl font-semibold border-2 border-gray-200 shadow-lg hover:shadow-xl hover:border-blue-300 transform hover:scale-105 transition-all duration-300 flex items-center justify-center"
-            >
-              Track Order
-              <svg className="w-5 h-5 ml-2 transform group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-              </svg>
-            </button>
-          </div>
-          <div className="text-center border-t border-gray-100 pt-6 transition-all duration-500 delay-900">
-            <p className="text-sm text-gray-500 mb-3">Your purchase is protected by</p>
-            <div className="flex justify-center space-x-6 items-center">
-              <div className="flex items-center space-x-2">
-                <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                </svg>
-                <span className="text-xs font-medium text-gray-600">Secure Payment</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <svg className="w-5 h-5 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
-                </svg>
-                <span className="text-xs font-medium text-gray-600">24/7 Support</span>
-              </div>
-            </div>
-          </div>
         </div>
-        <div className={`text-center mt-6 transition-all duration-500 delay-1000 ${
-          animationStage >= 3 ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'
-        }`}>
-          <p className="text-sm text-gray-600">
-            Want faster updates? <button className="text-blue-600 hover:text-blue-800 font-medium underline transition-colors">Get our mobile app</button>
+
+        {/* Help Link */}
+        <div
+          className={`text-center mt-4 transition-all duration-500 ${
+            animationStage >= 3
+              ? "translate-y-0 opacity-100"
+              : "translate-y-4 opacity-0"
+          }`}
+        >
+          <p className="text-xs text-gray-500">
+            Need help?{" "}
+            <button className="text-gray-900 hover:text-gray-700 font-medium">
+              Contact Support
+            </button>
           </p>
         </div>
       </div>

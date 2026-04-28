@@ -1,36 +1,76 @@
-import React, { useContext, useState } from "react";
+import React, { useContext, useState, useEffect } from "react";
 import { AuthContext } from "../Context/Authcontext";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import axios from "../api/axiosInstance";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 const Profile = () => {
   const { user, setUser } = useContext(AuthContext);
   const navigate = useNavigate();
+
   const [isEditing, setIsEditing] = useState(false);
+  const [loading, setLoading] = useState(false);
+
   const [formData, setFormData] = useState({
     name: user?.name || "",
-    email: user?.email || "",
     phone: user?.phone || "",
   });
-  const [addresses, setAddresses] = useState(
-    user?.addresses?.map((addr) =>
-      typeof addr === "string"
-        ? (() => {
-            const parts = addr.split(",").map((p) => p.trim());
-            return { address: parts[0] || "", city: parts[1] || "", state: parts[2] || "", zipCode: parts[3] || "" };
-          })()
-        : addr
-    ) || []
-  );
+
+  const [addresses, setAddresses] = useState([]);
+
   const [newAddress, setNewAddress] = useState({
     address: "",
     city: "",
     state: "",
     zipCode: "",
   });
-  const [loading, setLoading] = useState(false);
 
-  const handleInputChange = (e) => {
+  const [counts, setCounts] = useState({
+    orders: 0,
+    wishlist: 0,
+    cart: 0,
+  });
+
+  useEffect(() => {
+    // 🔥 SCROLL TO TOP
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    const fetchCounts = async () => {
+      try {
+        const orderRes = await axios.get("/api/Order/Myorders");
+        const orders = orderRes.data.data || orderRes.data || [];
+
+        const activeOrders = orders.filter((o) => o.status !== "Cancelled");
+
+        const wishRes = await axios.get("/api/WishList");
+        const wishlist = wishRes.data.data || wishRes.data || [];
+
+        const cartRes = await axios.get("/api/Cart/GetCartItems");
+
+        let cartCount = 0;
+        if (Array.isArray(cartRes.data)) {
+          cartCount = cartRes.data.length;
+        } else if (Array.isArray(cartRes.data.data)) {
+          cartCount = cartRes.data.data.length;
+        } else if (cartRes.data.data?.items) {
+          cartCount = cartRes.data.data.items.length;
+        }
+
+        setCounts({
+          orders: activeOrders.length,
+          wishlist: wishlist.length,
+          cart: cartCount,
+        });
+      } catch (err) {
+        console.error("Count fetch error:", err);
+      }
+    };
+
+    fetchCounts();
+  }, []);
+
+  const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
@@ -44,83 +84,90 @@ const Profile = () => {
     setNewAddress((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleAddAddress = () => {
+  const handleSave = () => {
+    const updatedUser = {
+      ...user,
+      name: formData.name,
+      phone: formData.phone,
+    };
+
+    setUser(updatedUser);
+    localStorage.setItem("user", JSON.stringify(updatedUser));
+
+    setIsEditing(false);
+    toast.success("Profile updated successfully");
+  };
+
+  const handleAddAddress = async () => {
     const { address, city, state, zipCode } = newAddress;
-    if (!address.trim() || !city.trim() || !state.trim() || !zipCode.trim()) {
-      alert("Please fill all address fields");
+
+    if (!address || !city || !state || !zipCode) {
+      toast.error("Please fill all fields");
       return;
     }
-    if (!/^\d+$/.test(zipCode)) {
-      alert("ZIP code must contain only numbers");
-      return;
-    }
-    setAddresses([...addresses, { ...newAddress }]);
-    setNewAddress({ address: "", city: "", state: "", zipCode: "" });
-  };
 
-  const handleEditAddressField = (index, field, value) => {
-    const updated = [...addresses];
-    updated[index] = { ...updated[index], [field]: value };
-    setAddresses(updated);
-  };
-
-  const handleDeleteAddress = (index) => {
-    const updated = addresses.filter((_, i) => i !== index);
-    setAddresses(updated);
-  };
-
-  const handleSave = async () => {
-    if (!user) return;
-
-    setLoading(true);
     try {
-      const updatedUser = { ...user, ...formData, addresses };
-      await axios.put(`http://localhost:3001/users/${user.id}`, updatedUser);
-      setUser(updatedUser);
-      localStorage.setItem("user", JSON.stringify(updatedUser));
-      setIsEditing(false);
-      alert("Profile updated successfully!");
-    } catch (error) {
-      console.error("Error updating profile:", error);
-      alert("Failed to update profile. Please try again.");
+      setLoading(true);
+
+      const payload = {
+        addressId: 0,
+        fullName: user.name,
+        phone: user.phone || "",
+        addressLine1: address,
+        addressLine2: "",
+        city,
+        state,
+        pincode: zipCode,
+        country: "India",
+        isDefault: true,
+      };
+
+      await axios.post("/api/Address/addaddress", payload);
+      setAddresses((prev) => [...prev, newAddress]);
+      setNewAddress({
+        address: "",
+        city: "",
+        state: "",
+        zipCode: "",
+      });
+
+      toast.success("Address added successfully");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to add address");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCancel = () => {
-    setFormData({
-      name: user?.name || "",
-      email: user?.email || "",
-      phone: user?.phone || "",
-    });
-    setAddresses(user?.addresses || []);
-    setNewAddress({ address: "", city: "", state: "", zipCode: "" });
-    setIsEditing(false);
-  };
-
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-        <div className="text-center max-w-md">
-          <div className="w-20 h-20 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
+      <div className="min-h-screen bg-black flex justify-center items-center">
+        <div className="text-center max-w-md px-6">
+          <div className="w-24 h-24 mx-auto bg-black rounded-2xl flex items-center justify-center mb-6 shadow-lg">
             <svg
-              className="w-10 h-10 text-gray-400"
-              fill="currentColor"
+              className="w-12 h-12 text-white"
+              fill="none"
+              stroke="currentColor"
               viewBox="0 0 24 24"
             >
-              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+              />
             </svg>
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Access Required</h2>
-          <p className="text-gray-600 mb-6">
-            Please sign in to view your profile
-          </p>
+          <h2 className="text-3xl font-bold text-gray-900 mb-2">
+            Welcome Back
+          </h2>
+          <p className="text-gray-500 mb-8">Sign in to access your account</p>
           <button
             onClick={() => navigate("/login")}
-            className="bg-black text-white px-8 py-3 rounded-lg font-medium hover:bg-gray-800 transition-colors shadow-sm"
+            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-xl font-semibold hover:shadow-lg hover:scale-105 transition-all"
           >
-            Sign In
+            Get Started
           </button>
         </div>
       </div>
@@ -128,313 +175,387 @@ const Profile = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-6xl mx-auto">
-        <div className="mb-8 text-center">
-          <h1 className="text-4xl font-bold text-gray-900 mb-3">
-            Profile Information
-          </h1>
-          <p className="text-gray-600 text-lg">
-            Manage your personal information and security settings
-          </p>
+    <div className="min-h-screen bg-[#FAFAFA]">
+      <ToastContainer
+        position="bottom-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop
+        closeOnClick
+        pauseOnHover
+        theme="colored"
+      />
+
+      {/* Hero Section */}
+      <div className="bg-black text-white">
+        <div className="max-w-6xl mx-auto px-4 py-12">
+          <div className="flex items-center gap-4 mb-4">
+            <div className="w-16 h-16 bg-white/20 backdrop-blur rounded-2xl flex items-center justify-center">
+              <svg
+                className="w-8 h-8"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                />
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold">My Profile</h1>
+              <p className="text-white/80">Manage your account settings</p>
+            </div>
+          </div>
         </div>
+      </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="max-w-6xl mx-auto px-4 -mt-8 pb-12">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="p-8">
-                <h2 className="text-2xl font-semibold text-gray-900 mb-6 pb-4 border-b border-gray-200">
-                  Personal Information
-                </h2>
-
-                <div className="mb-8">
-                  <div className="flex items-center justify-between mb-3">
-                    <label className="block text-sm font-medium text-gray-700 uppercase tracking-wide">
-                      Full Name
-                    </label>
-                    {!isEditing && (
-                      <button
-                        onClick={() => setIsEditing(true)}
-                        className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
+            {/* Personal Info Card */}
+            <div className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-shadow">
+              <div className="p-6 border-b border-gray-100">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
+                      <svg
+                        className="w-5 h-5 text-blue-600"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
                       >
-                        Edit
-                      </button>
-                    )}
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                        />
+                      </svg>
+                    </div>
+                    <h2 className="text-xl font-semibold text-gray-900">
+                      Personal Information
+                    </h2>
                   </div>
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      name="name"
-                      value={formData.name}
-                      onChange={handleInputChange}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                      placeholder="Enter your full name"
-                    />
-                  ) : (
-                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <span className="text-gray-900 font-medium text-lg">
-                        {user.name || "Not provided"}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="mb-8">
-                  <label className="block text-sm font-medium text-gray-700 uppercase tracking-wide mb-3">
-                    Phone
-                  </label>
-                  {isEditing ? (
-                    <input
-                      type="tel"
-                      name="phone"
-                      value={formData.phone}
-                      onChange={handleInputChange}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                      placeholder="Enter your phone number"
-                    />
-                  ) : (
-                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <span className="text-gray-900 font-medium text-lg">
-                        {user.phone || "Not provided"}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="mb-8">
-                  <label className="block text-sm font-medium text-gray-700 uppercase tracking-wide mb-3">
-                    Email
-                  </label>
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <span className="text-gray-900 font-medium text-lg block">
-                        {user.email}
-                      </span>
-                      <span className="text-xs text-gray-500 mt-1">
-                        Email cannot be changed
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mb-8">
-                  <label className="block text-sm font-medium text-gray-700 uppercase tracking-wide mb-3">
-                    Addresses
-                  </label>
-                  {addresses.map((addr, index) => (
-                    <div key={index} className="flex flex-col md:flex-row items-center mb-2 space-x-2 space-y-2 md:space-y-0">
-                      {isEditing ? (
-                        <>
-                          <input
-                            type="text"
-                            value={addr.address}
-                            onChange={(e) =>
-                              handleEditAddressField(index, "address", e.target.value)
-                            }
-                            placeholder="Address"
-                            className="w-full md:w-1/4 px-3 py-2 border border-gray-300 rounded-lg"
-                          />
-                          <input
-                            type="text"
-                            value={addr.city}
-                            onChange={(e) =>
-                              handleEditAddressField(index, "city", e.target.value)
-                            }
-                            placeholder="City"
-                            className="w-full md:w-1/4 px-3 py-2 border border-gray-300 rounded-lg"
-                          />
-                          <input
-                            type="text"
-                            value={addr.state}
-                            onChange={(e) =>
-                              handleEditAddressField(index, "state", e.target.value)
-                            }
-                            placeholder="State"
-                            className="w-full md:w-1/4 px-3 py-2 border border-gray-300 rounded-lg"
-                          />
-                          <input
-                            type="text"
-                            value={addr.zipCode}
-                            onChange={(e) =>
-                              handleEditAddressField(index, "zipCode", e.target.value)
-                            }
-                            placeholder="ZIP Code"
-                            className="w-full md:w-1/4 px-3 py-2 border border-gray-300 rounded-lg"
-                          />
-                          <button
-                            onClick={() => handleDeleteAddress(index)}
-                            className="text-red-600 hover:text-red-800 font-medium mt-2 md:mt-0"
-                          >
-                            Delete
-                          </button>
-                        </>
-                      ) : (
-                        <div className="p-3 bg-gray-50 rounded-lg w-full">
-                          {`${addr.address}, ${addr.city}, ${addr.state}, ${addr.zipCode}`}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-
-                  {isEditing && (
-                    <div className="space-y-2 mt-4">
-                      <input
-                        type="text"
-                        name="address"
-                        value={newAddress.address}
-                        onChange={handleNewAddressChange}
-                        placeholder="Address"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                      />
-                      <input
-                        type="text"
-                        name="city"
-                        value={newAddress.city}
-                        onChange={handleNewAddressChange}
-                        placeholder="City"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                      />
-                      <input
-                        type="text"
-                        name="state"
-                        value={newAddress.state}
-                        onChange={handleNewAddressChange}
-                        placeholder="State"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                      />
-                      <input
-                        type="text"
-                        name="zipCode"
-                        value={newAddress.zipCode}
-                        onChange={handleNewAddressChange}
-                        placeholder="ZIP Code"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                      />
-                      <button
-                        onClick={handleAddAddress}
-                        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                      >
-                        Add Address
-                      </button>
-                    </div>
+                  {!isEditing && (
+                    <button
+                      onClick={() => setIsEditing(true)}
+                      className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                    >
+                      Edit
+                    </button>
                   )}
                 </div>
               </div>
+
+              <div className="p-6 space-y-5">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Full Name
+                  </label>
+                  {isEditing ? (
+                    <input
+                      name="name"
+                      value={formData.name}
+                      onChange={handleChange}
+                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    />
+                  ) : (
+                    <p className="text-gray-900 font-medium">
+                      {user.name || "Not provided"}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Phone Number
+                  </label>
+                  {isEditing ? (
+                    <input
+                      name="phone"
+                      value={formData.phone}
+                      onChange={handleChange}
+                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    />
+                  ) : (
+                    <p className="text-gray-900">
+                      {user.phone || "Not provided"}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Email Address
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <p className="text-gray-900">{user.email}</p>
+                    <span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded-full">
+                      Verified
+                    </span>
+                  </div>
+                </div>
+
+                {isEditing && (
+                  <div className="flex gap-3 pt-4">
+                    <button
+                      onClick={handleSave}
+                      className="bg-black text-white px-6 py-2.5 rounded-xl font-medium hover:shadow-lg transition-all"
+                    >
+                      Save Changes
+                    </button>
+                    <button
+                      onClick={() => setIsEditing(false)}
+                      className="border border-gray-300 text-gray-700 px-6 py-2.5 rounded-xl font-medium hover:bg-gray-50 transition-all"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="p-8">
-                <h2 className="text-2xl font-semibold text-gray-900 mb-6 pb-4 border-b border-gray-200">
-                  Security
-                </h2>
-
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">
-                      Password
-                    </label>
-                    <p className="text-gray-600 text-lg">••••••••</p>
+            {/* Addresses Card */}
+            <div className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-shadow">
+              <div className="p-6 border-b border-gray-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center">
+                    <svg
+                      className="w-5 h-5 text-purple-600"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                      />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                      />
+                    </svg>
                   </div>
-                  <button
-                    onClick={() => navigate("/change-password")}
-                    className="bg-white border border-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-50 font-medium transition-colors shadow-sm"
-                  >
-                    Change Password
-                  </button>
+                  <h2 className="text-xl font-semibold text-gray-900">
+                    Addresses
+                  </h2>
+                </div>
+              </div>
+
+              <div className="p-6">
+                {addresses.length > 0 ? (
+                  <div className="space-y-3 mb-6">
+                    {addresses.map((addr, i) => (
+                      <div
+                        key={i}
+                        className="p-4 bg-gradient-to-r from-gray-50 to-white rounded-xl border border-gray-100 hover:border-purple-200 transition-all"
+                      >
+                        <p className="text-gray-700">
+                          {addr.address}, {addr.city}, {addr.state} -{" "}
+                          {addr.zipCode}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 bg-gray-50 rounded-xl">
+                    <svg
+                      className="w-16 h-16 mx-auto text-gray-300 mb-3"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={1}
+                        d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                      />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={1}
+                        d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                      />
+                    </svg>
+                    <p className="text-gray-500">No addresses saved yet</p>
+                  </div>
+                )}
+
+                <div className="border-t border-gray-100 pt-6 mt-4">
+                  <h3 className="font-medium text-gray-900 mb-4">
+                    Add New Address
+                  </h3>
+                  <div className="space-y-3">
+                    <input
+                      name="address"
+                      placeholder="Street Address"
+                      value={newAddress.address}
+                      onChange={handleNewAddressChange}
+                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                    />
+                    <div className="grid grid-cols-2 gap-3">
+                      <input
+                        name="city"
+                        placeholder="City"
+                        value={newAddress.city}
+                        onChange={handleNewAddressChange}
+                        className="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                      />
+                      <input
+                        name="state"
+                        placeholder="State"
+                        value={newAddress.state}
+                        onChange={handleNewAddressChange}
+                        className="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                      />
+                    </div>
+                    <input
+                      name="zipCode"
+                      placeholder="Pincode"
+                      value={newAddress.zipCode}
+                      onChange={handleNewAddressChange}
+                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                    />
+                    <button
+                      onClick={handleAddAddress}
+                      disabled={loading}
+                      className="w-full bg-black text-white px-4 py-2.5 rounded-xl font-medium hover:shadow-lg transition-all disabled:opacity-50"
+                    >
+                      {loading ? "Adding..." : "Add Address"}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
+          {/* Sidebar */}
           <div className="space-y-6">
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-              <h3 className="font-semibold text-gray-900 mb-4 text-lg">
-                Profile Actions
-              </h3>
-              {!isEditing ? (
+            {/* Stats Cards */}
+            <div className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-shadow overflow-hidden">
+              <div className="p-6 border-b border-gray-100">
+                <h3 className="font-semibold text-gray-900">Quick Stats</h3>
+              </div>
+              <div className="divide-y divide-gray-100">
                 <button
-                  onClick={() => setIsEditing(true)}
-                  className="w-full bg-black text-white py-3 px-4 rounded-lg hover:bg-gray-800 transition-colors font-medium shadow-sm mb-3"
+                  onClick={() => navigate("/my-orders")}
+                  className="w-full p-5 flex items-center justify-between hover:bg-blue-50 transition-all group"
                 >
-                  Edit Profile
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center group-hover:bg-blue-200 transition">
+                      <svg
+                        className="w-5 h-5 text-blue-600"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"
+                        />
+                      </svg>
+                    </div>
+                    <span className="text-gray-700 font-medium">Orders</span>
+                  </div>
+                  <span className="text-2xl font-bold text-blue-600">
+                    {counts.orders}
+                  </span>
                 </button>
-              ) : (
-                <div className="space-y-3">
-                  <button
-                    onClick={handleSave}
-                    disabled={loading}
-                    className="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-colors font-medium shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loading ? "Saving..." : "Save Changes"}
-                  </button>
-                  <button
-                    onClick={handleCancel}
-                    disabled={loading}
-                    className="w-full bg-gray-200 text-gray-700 py-3 px-4 rounded-lg hover:bg-gray-300 transition-colors font-medium shadow-sm disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              )}
-            </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-              <h3 className="font-semibold text-gray-900 mb-4 text-lg">
-                Account Overview
-              </h3>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                  <span className="text-gray-600">Orders</span>
-                  <span className="font-semibold text-gray-900 bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-sm">
-                    {user.orders?.length || 0}
+                <button
+                  onClick={() => navigate("/wishlist")}
+                  className="w-full p-5 flex items-center justify-between hover:bg-pink-50 transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-pink-100 rounded-xl flex items-center justify-center group-hover:bg-pink-200 transition">
+                      <svg
+                        className="w-5 h-5 text-pink-600"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+                        />
+                      </svg>
+                    </div>
+                    <span className="text-gray-700 font-medium">Wishlist</span>
+                  </div>
+                  <span className="text-2xl font-bold text-pink-600">
+                    {counts.wishlist}
                   </span>
-                </div>
-                <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                  <span className="text-gray-600">Wishlist Items</span>
-                  <span className="font-semibold text-gray-900 bg-red-100 text-red-800 px-2 py-1 rounded-full text-sm">
-                    {user.wishlist?.length || 0}
+                </button>
+
+                <button
+                  onClick={() => navigate("/cart")}
+                  className="w-full p-5 flex items-center justify-between hover:bg-green-50 transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center group-hover:bg-green-200 transition">
+                      <svg
+                        className="w-5 h-5 text-green-600"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-1.5 6M17 13l1.5 6M9 21h6M12 18v3"
+                        />
+                      </svg>
+                    </div>
+                    <span className="text-gray-700 font-medium">
+                      Cart Items
+                    </span>
+                  </div>
+                  <span className="text-2xl font-bold text-green-600">
+                    {counts.cart}
                   </span>
-                </div>
-                <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                  <span className="text-gray-600">Cart Items</span>
-                  <span className="font-semibold text-gray-900 bg-green-100 text-green-800 px-2 py-1 rounded-full text-sm">
-                    {user.cart?.length || 0}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-2">
-                  <span className="text-gray-600">Member Since</span>
-                  <span className="font-semibold text-gray-900">
-                    {user.created_at
-                      ? new Date(user.created_at).getFullYear()
-                      : "2024"}
-                  </span>
-                </div>
+                </button>
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-              <h3 className="font-semibold text-gray-900 mb-4 text-lg">
-                Quick Links
-              </h3>
-              <div className="space-y-2">
-                <button
-                  onClick={() => navigate("/my-orders")}
-                  className="w-full text-left px-3 py-2 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
-                >
-                  My Orders
-                </button>
-                <button
-                  onClick={() => navigate("/wishlist")}
-                  className="w-full text-left px-3 py-2 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
-                >
-                  Wishlist
-                </button>
-                <button
-                  onClick={() => navigate("/cart")}
-                  className="w-full text-left px-3 py-2 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
-                >
-                  Shopping Cart
-                </button>
+            {/* Security Card */}
+            <div className="bg-white rounded-2xl shadow-sm p-6">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center">
+                  <svg
+                    className="w-5 h-5 text-gray-600"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                    />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-gray-900 font-medium mb-1">Security</p>
+                  <p className="text-gray-500 text-sm">
+                    Your account is protected with industry-standard security
+                  </p>
+                </div>
               </div>
             </div>
           </div>

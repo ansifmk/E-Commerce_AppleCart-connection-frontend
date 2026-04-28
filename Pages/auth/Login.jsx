@@ -9,6 +9,7 @@ const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -22,11 +23,12 @@ const Login = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
+    setError("");
 
     const result = await login(email, password);
 
     if (result.success) {
-      setError("");
       const loggedInUser = result.user;
 
       if (loggedInUser.role === "admin") {
@@ -37,72 +39,71 @@ const Login = () => {
     } else {
       setError(result.message);
     }
+
+    setLoading(false);
   };
 
   return (
     <div className="min-h-screen bg-black flex flex-col">
       <header className="bg-black py-6 px-6">
-        <div className="max-w-md mx-auto flex justify-start">
+        <div className="max-w-md mx-auto">
           <h1 className="text-lg font-bold text-white">Apple</h1>
         </div>
       </header>
-      <main className="flex-grow flex items-center justify-center py-8 px-4">
+
+      <main className="flex-grow flex items-center justify-center px-4">
         <div className="max-w-md w-full">
+
           <div className="text-center mb-8">
-            <h2 className="text-2xl font-light text-white mb-2">
-              One account. Any device.
-            </h2>
-            <p className="text-white text-lg font-light mb-4">Just for you.</p>
-            <p className="text-gray-300 font-normal">Sign in to get started</p>
+            <h2 className="text-2xl text-white">Sign in</h2>
+            <p className="text-gray-300">Access your account</p>
           </div>
 
-          <div className="bg-gray-800 rounded-lg p-8 mb-6">
+          <div className="bg-gray-800 p-8 rounded-lg">
             <form onSubmit={handleSubmit}>
+
               {error && (
-                <div className="mb-4 p-3 bg-red-900/50 border border-red-700 rounded-md">
+                <div className="mb-4 p-3 bg-red-900 border border-red-700 rounded">
                   <p className="text-red-400 text-sm">{error}</p>
                 </div>
               )}
 
-              <div className="mb-6">
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="w-full px-0 py-3 bg-transparent border-0 border-b-2 border-gray-600 focus:border-blue-500 text-white placeholder-blue-400 focus:outline-none transition-colors"
-                  placeholder="email"
-                />
-              </div>
+              <input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full mb-6 p-3 bg-transparent border-b border-gray-600 text-white"
+                required
+              />
 
-              <div className="mb-6">
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="w-full px-0 py-3 bg-transparent border-0 border-b-2 border-gray-600 focus:border-blue-500 text-white placeholder-gray-400 focus:outline-none transition-colors"
-                  placeholder="Password"
-                />
-              </div>
+              <input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full mb-6 p-3 bg-transparent border-b border-gray-600 text-white"
+                required
+              />
 
               <button
                 type="submit"
-                className="w-full py-4 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                disabled={loading}
+                className="w-full py-3 bg-blue-600 text-white rounded"
               >
-                Next
+                {loading ? "Signing in..." : "Login"}
               </button>
             </form>
 
-            <div className="mt-6 text-center space-x-4">
-              <a
+            <div className="mt-6 text-center">
+              <button
                 onClick={() => navigate("/register")}
-                href="#"
-                className="text-sm text-gray-400 hover:text-white underline"
+                className="text-blue-400 underline"
               >
                 Create account
-              </a>
+              </button>
             </div>
+
           </div>
         </div>
       </main>

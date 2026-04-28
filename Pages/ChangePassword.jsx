@@ -1,7 +1,7 @@
 import React, { useState, useContext } from "react";
 import { AuthContext } from "../Context/Authcontext";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import axios from "../api/axiosInstance";
 
 const ChangePassword = () => {
   const { user, setUser } = useContext(AuthContext);

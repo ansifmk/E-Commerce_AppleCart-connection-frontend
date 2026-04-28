@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useContext } from "react";
-import axios from "axios";
+import axios from "../api/axiosInstance";
 import { useNavigate } from "react-router-dom";
 import { AuthContext } from "../Context/Authcontext";
 import { toast, ToastContainer } from "react-toastify";
+import { useSearchParams } from "react-router-dom";
 import "react-toastify/dist/ReactToastify.css";
 
 const Products = () => {
@@ -11,80 +12,153 @@ const Products = () => {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
   const [price, setPrice] = useState("");
-
+  const [cartIds, setCartIds] = useState([]);
+  // const [wishlistIds, setWishlistIds] = useState([]);
   const navigate = useNavigate();
-  const { user, setUser } = useContext(AuthContext);
+  const { user, setUser, fetchCartCount, wishlistIds, setWishlistIds } =useContext(AuthContext);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const pageFromUrl = parseInt(searchParams.get("page")) || 1;
+  const [pageNumber, setPageNumber] = useState(pageFromUrl);
+const [hasMore, setHasMore] = useState(true);
+  useEffect(() => {
+    setSearchParams({ page: pageNumber });
+  }, [pageNumber]);
+  const pageSize = 12;
 
   useEffect(() => {
-    axios
-      .get("http://localhost:3001/products")
-      .then((res) => setProducts(res.data))
-      .catch(() => toast.error("Failed to load products"))
-      .finally(() => setLoading(false));
-  }, []);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [pageNumber]);
 
-  const filtered = products.filter((p) => {
-    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()); 
-    const matchCategory = category ? p.category === category : true;
-    let matchPrice = true;
+  useEffect(() => {
+    fetchProducts();
+  }, [pageNumber, search, category, price]); // 🔥 added dependencies
+  const fetchCartIds = async () => {
+    try {
+      const res = await axios.get("/api/Cart/GetCartItems");
 
-    if (price) {
-      const [min, max] = price.split("-").map(Number);
-      matchPrice = max ? p.price >= min && p.price <= max : p.price >= min;
+const items = res.data?.data?.items || [];
+
+setProducts(
+  items.map((item) => ({
+    ...item,
+    name: item.title,
+    images: [item.thumbnail],
+    count: item.stock,
+  }))
+);
+
+// 🔥 IMPORTANT LOGIC
+setHasMore(items.length === pageSize);
+      setCartIds(items.map((i) => i.productId));
+    } catch (err) {
+      console.error("Cart fetch error:", err);
     }
+  };
+  useEffect(() => {
+    fetchCartIds();
+  }, []);
+ const fetchProducts = async () => {
+  try {
+    setLoading(true);
 
-    return matchSearch && matchCategory && matchPrice;
-  });
-
-  const toggleWishlist = async (product, e) => {
-    e.stopPropagation();
-    if (!user) return toast.info("Please login first");
-
-    const isInWishlist = user.wishlist?.some((i) => i.id === product.id);
-    const updatedWishlist = isInWishlist
-      ? user.wishlist.filter((i) => i.id !== product.id)
-      : [...(user.wishlist || []), product];
-
-    await axios.patch(`http://localhost:3001/users/${user.id}`, {
-      wishlist: updatedWishlist,
+    // current page
+    const res = await axios.get("/api/Products/GetproductsCombined", {
+      params: { pageNumber, pageSize, search, category, sortBy: price },
     });
 
-    const updatedUser = { ...user, wishlist: updatedWishlist };
-    setUser(updatedUser);
-    localStorage.setItem("user", JSON.stringify(updatedUser));
+    const items = res.data?.data?.items || [];
 
-    toast[isInWishlist ? "warning" : "success"](
-      `${product.name} ${isInWishlist ? "removed" : "added"} from wishlist`
+    setProducts(
+      items.map((item) => ({
+        ...item,
+        name: item.title,
+        images: [item.thumbnail],
+        count: item.stock,
+      }))
     );
-  };
 
-const addToCart = async (product, e) => {
-  e.stopPropagation();
-  if (!user) return toast.info("Please login first");
-  if (product.count === 0) return toast.warning("Out of stock");
+    // 🔥 CHECK NEXT PAGE
+    const nextRes = await axios.get("/api/Products/GetproductsCombined", {
+      params: { pageNumber: pageNumber + 1, pageSize, search, category, sortBy: price },
+    });
 
-  const cartItemIndex = user.cart?.findIndex((i) => i.id === product.id);
-  let updatedCart = [];
+    const nextItems = nextRes.data?.data?.items || [];
 
-  if (cartItemIndex >= 0) {
-    updatedCart = [...user.cart];
-    updatedCart[cartItemIndex].quantity += 1;
-  } else {
-    updatedCart = [...(user.cart || []), { ...product, quantity: 1 }];
+    setHasMore(nextItems.length > 0); // ✅ ONLY if next page has data
+
+  } catch (err) {
+    console.error(err);
+    toast.error("Failed to load products");
+  } finally {
+    setLoading(false);
   }
-
-  await axios.patch(`http://localhost:3001/users/${user.id}`, {
-    cart: updatedCart,
-  });
-
-  const updatedUser = { ...user, cart: updatedCart };
-  setUser(updatedUser);
-  localStorage.setItem("user", JSON.stringify(updatedUser));
-
-  toast.success(`${product.name} added to cart`);
 };
 
+  const fetchWishlistIds = async () => {
+    try {
+      const res = await axios.get("/api/WishList");
 
+      const items = res.data?.data || [];
+
+      setWishlistIds(items.map((i) => i.productId));
+    } catch (err) {
+      console.error("Wishlist fetch error:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchWishlistIds();
+  }, []);
+  const toggleWishlist = async (productId) => {
+    if (!user) return toast.info("Please login first");
+
+    const isAlreadyInWishlist = wishlistIds.includes(productId);
+
+    try {
+      await axios.post(`/api/WishList/${productId}`);
+
+      // ✅ Update UI instantly
+      setWishlistIds((prev) =>
+        isAlreadyInWishlist
+          ? prev.filter((id) => id !== productId)
+          : [...prev, productId],
+      );
+
+      // 🔥 Show correct toast
+      toast[isAlreadyInWishlist ? "warning" : "success"](
+        isAlreadyInWishlist
+          ? "Removed from wishlist 💔"
+          : "Added to wishlist ❤️",
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error("Something went wrong");
+    }
+  };
+
+  const addToCart = async (product, e) => {
+    e.stopPropagation();
+
+    if (!user) return toast.info("Please login first");
+    if (product.count === 0) return toast.warning("Out of stock");
+
+    try {
+      const res = await axios.post("/api/Cart/add", {
+        productId: product.id,
+        Quantity: 1,
+      });
+
+      // 🔥 FIX START (VERY IMPORTANT)
+      setCartIds((prev) => [...prev, product.id]); // update button instantly
+      fetchCartCount(); // update navbar instantly
+      // 🔥 FIX END
+
+      toast.success(`${product.name} added to cart`);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to add to cart");
+    }
+  };
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -119,7 +193,7 @@ const addToCart = async (product, e) => {
               Explore our complete range of Apple products
             </p>
             <p className="text-sm text-gray-500 mt-2">
-              {filtered.length} products available
+              {products.length} products available
             </p>
 
             <div className="w-full max-w-2xl mx-auto mt-8">
@@ -152,10 +226,8 @@ const addToCart = async (product, e) => {
                 className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">All Prices</option>
-                <option value="0-50000">₹0 - ₹50,000</option>
-                <option value="50001-100000">₹50,001 - ₹1,00,000</option>
-                <option value="100001-150000">₹1,00,001 - ₹1,50,000</option>
-                <option value="150001">₹1,50,001+</option>
+                <option value="priceAsc">Low to High</option>
+                <option value="priceDesc">High to Low</option>
               </select>
             </div>
           </div>
@@ -164,7 +236,7 @@ const addToCart = async (product, e) => {
 
       <section className="bg-gray-50 py-16">
         <div className="max-w-7xl mx-auto px-4">
-          {filtered.length === 0 ? (
+          {products.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-gray-600">No products found.</p>
               {(category || price || search) && (
@@ -182,14 +254,9 @@ const addToCart = async (product, e) => {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {filtered.map((product) => {
-                const isInWishlist = user?.wishlist?.some(
-                  (item) => item.id === product.id
-                );
-                const isInCart = user?.cart?.some(
-                  (item) => item.id === product.id
-                );
-
+              {products.map((product) => {
+                const isInWishlist = wishlistIds.includes(product.id);
+                const isInCart = cartIds.includes(product.id);
                 return (
                   <div
                     key={product.id}
@@ -197,7 +264,11 @@ const addToCart = async (product, e) => {
                     onClick={() => navigate(`/product/${product.id}`)}
                   >
                     <button
-                      onClick={(e) => toggleWishlist(product, e)}
+                      onClick={(e) => {
+                        e.stopPropagation(); // ✅ stop card click
+                        e.preventDefault(); // ✅ prevent navigation
+                        toggleWishlist(product.id); // ✅ FIXED
+                      }}
                       className="absolute top-3 right-3 p-2 rounded-full bg-white shadow z-10"
                     >
                       <svg
@@ -252,6 +323,8 @@ const addToCart = async (product, e) => {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
+                            e.preventDefault(); // 🔥 ADD THIS
+
                             if (isInCart) {
                               navigate("/cart");
                             } else {
@@ -263,8 +336,8 @@ const addToCart = async (product, e) => {
                             product.count === 0
                               ? "bg-gray-300 text-gray-500 cursor-not-allowed"
                               : isInCart
-                              ? "bg-green-600 text-white hover:bg-green-700"
-                              : "bg-black text-white hover:bg-gray-800"
+                                ? "bg-green-600 text-white hover:bg-green-700"
+                                : "bg-black text-white hover:bg-gray-800"
                           }`}
                         >
                           {isInCart ? "Go to Cart" : "Add to Cart"}
@@ -278,6 +351,27 @@ const addToCart = async (product, e) => {
           )}
         </div>
       </section>
+      <div className="flex justify-center mt-10 gap-4">
+        <button
+          onClick={() => setPageNumber(pageNumber - 1)}
+          disabled={pageNumber === 1}
+          className="px-4 py-2 bg-black text-white rounded"
+        >
+          Prev
+        </button>
+
+        <span className="px-4 py-2">Page {pageNumber}</span>
+
+     <button
+  onClick={() => setPageNumber(pageNumber + 1)}
+  disabled={!hasMore}
+  className={`px-4 py-2 rounded ${
+    hasMore ? "bg-black text-white" : "bg-gray-300 text-gray-500 cursor-not-allowed"
+  }`}
+>
+  Next
+</button>
+      </div>
     </div>
   );
 };

@@ -1,21 +1,33 @@
 import React, { useEffect, useState, useContext } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import axios from "axios";
+import axios from "../api/axiosInstance";
 import { AuthContext } from "../Context/Authcontext";
-import { toast } from "react-toastify";
+import { toast, ToastContainer } from "react-toastify";
 
 const ProductDetails = () => {
   const { id } = useParams();
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [cartIds, setCartIds] = useState([]);
   const navigate = useNavigate();
-  const { user, setUser } = useContext(AuthContext);
+  const { user, fetchCartCount, wishlistIds, setWishlistIds } =  useContext(AuthContext);
 
   useEffect(() => {
     axios
-      .get(`http://localhost:3001/products/${id}`)
-      .then((res) => setProduct(res.data))
+      .get("https://localhost:7096/api/Products/GetAllItems")
+      .then((res) => {
+        const products = res.data.data || [];
+
+        // ✅ find product by id
+        const selectedProduct = products.find((p) => p.id === parseInt(id));
+
+        if (!selectedProduct) {
+          setError("Product not found.");
+        } else {
+          setProduct(selectedProduct);
+        }
+      })
       .catch((err) => {
         console.error(err);
         setError("Product not found.");
@@ -23,101 +35,104 @@ const ProductDetails = () => {
       .finally(() => setLoading(false));
   }, [id]);
 
+  useEffect(() => {
+    const fetchCartIds = async () => {
+      try {
+        const res = await axios.get("/api/Cart/GetCartItems");
+        const items = res.data?.data?.items || [];
+        setCartIds(items.map((i) => i.productId));
+      } catch (err) {
+        console.error("Cart fetch error:", err);
+      }
+    };
+
+    fetchCartIds();
+  }, []);
   const addToCart = async () => {
-    if (!user) return toast.info("Please login to add items to cart");
+    if (!user) return toast.info("Please login first");
     if (!product) return;
-    if (product.count === 0) return toast.warning("This product is out of stock");
+    if (product.stock === 0) return toast.warning("Out of stock");
 
     try {
-      const existingCartItem = user.cart?.find((item) => item.id === product.id);
-      const updatedCart = existingCartItem
-        ? user.cart.map((item) =>
-            item.id === product.id ? { ...item, quantity: (item.quantity || 1) + 1 } : item
-          )
-        : [...(user.cart || []), { ...product, quantity: 1 }];
+      await axios.post("/api/Cart/add", {
+        productId: product.id,
+        Quantity: 1,
+      });
 
-      const updatedUser = {
-        ...user,
-        cart: updatedCart,
-        orders: user.orders || [],
-      };
+      setCartIds((prev) => [...prev, product.id]); // ✅ ADD THIS
+      fetchCartCount();
 
-      await Promise.all([
-        axios.patch(`http://localhost:3001/users/${user.id}`, { cart: updatedCart }),
-        axios.patch(`http://localhost:3001/products/${product.id}`, {
-          count: Math.max(0, product.count - 1),
-        }),
-      ]);
-
-      setUser(updatedUser);
-      localStorage.setItem("user", JSON.stringify(updatedUser));
-      toast.success(`${product.name} added to cart!`);
+      toast.success(`${product.title} added to cart`);
     } catch (err) {
       console.error(err);
-      toast.error("Failed to add product to cart. Please try again.");
+      toast.error("Failed to add to cart");
     }
   };
-
   const toggleWishlist = async () => {
     if (!user) return toast.info("Please login to use wishlist");
     if (!product) return;
 
-    const isInWishlist = user.wishlist?.some((item) => item.id === product.id);
-    const updatedWishlist = isInWishlist
-      ? user.wishlist.filter((item) => item.id !== product.id)
-      : [...(user.wishlist || []), product];
-
-    const updatedUser = {
-      ...user,
-      wishlist: updatedWishlist,
-      orders: user.orders || [],
-      cart: user.cart || [],
-    };
+    const isInWishlist = wishlistIds.includes(product.id);
 
     try {
-      await axios.patch(`http://localhost:3001/users/${user.id}`, { wishlist: updatedWishlist });
-      setUser(updatedUser);
-      localStorage.setItem("user", JSON.stringify(updatedUser));
+      await axios.post(`/api/WishList/${product.id}`);
+
+      // ✅ update context state
+      setWishlistIds((prev) =>
+        isInWishlist
+          ? prev.filter((id) => id !== product.id)
+          : [...prev, product.id],
+      );
+
+      // ✅ YOUR SAME TOAST LOGIC (kept)
       toast[isInWishlist ? "warning" : "success"](
         isInWishlist
-          ? `${product.name} removed from wishlist`
-          : `${product.name} added to wishlist`
+          ? `${product.title} removed from wishlist`
+          : `${product.title} added to wishlist`,
       );
     } catch (err) {
       console.error(err);
       toast.error("Failed to update wishlist. Please try again.");
     }
   };
-
   if (loading) return <p className="text-center mt-10">Loading...</p>;
   if (error) return <p className="text-center mt-10 text-red-600">{error}</p>;
   if (!product) return null;
 
-  const isInWishlist = user?.wishlist?.some((item) => item.id === product.id);
-  const isInCart = user?.cart?.some((item) => item.id === product.id);
-
+  const isInWishlist = wishlistIds.includes(product.id);
+  const isInCart = cartIds.includes(product.id);
   return (
     <div className="max-w-5xl mx-auto p-6">
-      <button onClick={() => navigate(-1)} className="mb-4 text-blue-600 hover:underline">
+      <ToastContainer position="top-right" autoClose={2000} />
+      <button
+        onClick={() => navigate(-1)}
+        className="mb-4 text-blue-600 hover:underline"
+      >
         ← Back
       </button>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-white p-6 rounded-lg shadow">
         <div className="flex items-center justify-center">
           <img
-            src={product.images?.[0]}
-            alt={product.name}
+            src={product.thumbnail}
+            alt={product.title}
             className="rounded-lg max-h-96 object-contain"
           />
         </div>
+
         <div>
-          <h1 className="text-3xl font-semibold mb-4">{product.name}</h1>
+          <h1 className="text-3xl font-semibold mb-4">{product.title}</h1>
+
           <p className="text-gray-600 mb-4">{product.description}</p>
+
           <p className="text-2xl font-bold mb-2">
             ₹{product.price ? product.price.toLocaleString() : "N/A"}
           </p>
+
           <p className="text-sm text-gray-500 mb-4">
-            {product.count > 0 ? `${product.count} in stock` : "Out of stock"}
+            {product.stock > 0 ? `${product.stock} in stock` : "Out of stock"}
           </p>
+
           <div className="flex space-x-4">
             {isInCart ? (
               <button
@@ -129,14 +144,14 @@ const ProductDetails = () => {
             ) : (
               <button
                 onClick={addToCart}
-                disabled={product.count === 0}
+                disabled={product.stock === 0}
                 className={`px-6 py-3 rounded-lg font-medium ${
-                  product.count === 0
+                  product.stock === 0
                     ? "bg-gray-300 text-gray-500 cursor-not-allowed"
                     : "bg-black text-white hover:bg-gray-800"
                 }`}
               >
-                {product.count === 0 ? "Out of Stock" : "Add to Cart"}
+                {product.stock === 0 ? "Out of Stock" : "Add to Cart"}
               </button>
             )}
 

@@ -1,64 +1,148 @@
 import React, { createContext, useState, useEffect } from "react";
-import axios from "axios";
+import axios from "../api/axiosInstance";
 
 export const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [cartCount, setCartCount] = useState(0);
+  const [wishlistIds, setWishlistIds] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const savedUser = localStorage.getItem("user");
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
+
+  // 🔁 Load user from localStorage
+ useEffect(() => {
+  const savedUser = localStorage.getItem("user");
+
+  if (savedUser) {
+    setUser(JSON.parse(savedUser));
+  }
+
+  setLoading(false); // 🔥 VERY IMPORTANT
+}, []);
+const fetchWishlistIds = async () => {
+  try {
+    const res = await axios.get("/api/WishList");
+
+    const items = res.data?.data || [];
+
+    setWishlistIds(items.map(i => i.productId));
+
+  } catch (err) {
+    console.error("Wishlist error:", err);
+  }
+};
+useEffect(() => {
+  if (user) {
+    fetchWishlistIds();
+  }
+}, [user]);
+  // 🔥 FETCH CART COUNT FROM BACKEND (FIXED)
+  const fetchCartCount = async () => {
+    try {
+      const storedUser = JSON.parse(localStorage.getItem("user"));
+      const token = storedUser?.token;
+
+      if (!token) {
+        setCartCount(0);
+        return;
+      }
+
+      const res = await axios.get(
+        "https://localhost:7096/api/Cart/GetCartItems",
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          withCredentials: true,
+        }
+      );
+
+      console.log("CART COUNT API:", res.data);
+
+      // 🔥 IMPORTANT FIX (handle empty cart)
+      if (!res.data?.data) {
+        setCartCount(0);
+        return;
+      }
+
+      const items = res.data.data.items || [];
+
+      const total = items.reduce(
+        (sum, item) => sum + item.quantity,
+        0
+      );
+
+      setCartCount(total);
+
+    } catch (err) {
+      console.error("Cart count error:", err);
+      setCartCount(0); // 🔥 fallback safety
     }
-  }, []);
+  };
 
+  // 🔐 LOGIN
   const login = async (email, password) => {
     try {
-      if (!email || !password) {
-        throw new Error("Email and password are required");
-      }
+      const res = await axios.post(
+        "https://localhost:7096/api/auth/login",
+        {
+          email,
+          password,
+        }
+      );
 
-      const cleanEmail = email.trim().toLowerCase();
-      const res = await axios.get(`http://localhost:3001/users?email=${cleanEmail}`);
-      if (res.data.length === 0) {
-        throw new Error("User not found");
-      }
-     const foundUser = res.data[0];
-      if (foundUser.email.toLowerCase() !== cleanEmail) {
-        throw new Error("Invalid email");
-      }
-      if (foundUser.password !== password) {
-        throw new Error("Invalid password");
-      }
-      if (foundUser.isBlock) {
-        throw new Error("Your account has been blocked. Contact admin.");
-      }
-      setUser(foundUser);
-      localStorage.setItem("user", JSON.stringify(foundUser));
+const userData = {
+  ...res.data.users,
+  token: res.data.accessToken,
+  role: res.data.role?.toLowerCase() // 🔥 IMPORTANT FIX
+};
+      setUser(userData);
+      localStorage.setItem("user", JSON.stringify(userData));
 
-      return { success: true, user: foundUser };
+      // 🔥 VERY IMPORTANT
+      fetchCartCount();
+
+      return { success: true, user: userData };
+
     } catch (err) {
-      return { success: false, message: err.message || "Login failed" };
+      return {
+        success: false,
+        message: err.response?.data?.message || "Login failed",
+      };
     }
   };
+
+  // 🔥 LOAD CART COUNT WHEN USER CHANGES
+  useEffect(() => {
+    if (user) {
+      fetchCartCount();
+    }
+  }, [user]);
+
+  // 🔓 LOGOUT
   const logout = () => {
     setUser(null);
+    setCartCount(0);
     localStorage.removeItem("user");
-  };
-  const refreshUser = async () => {
-    if (!user) return;
-    try {
-      const res = await axios.get(`http://localhost:3001/users/${user.id}`);
-      setUser(res.data);
-      localStorage.setItem("user", JSON.stringify(res.data));
-    } catch (err) {
-      console.error("Error refreshing user:", err);
-    }
+    localStorage.removeItem("token");
   };
 
   return (
-    <AuthContext.Provider value={{ user, setUser, login, logout, refreshUser }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        setUser,
+        login,
+        logout,
+        cartCount,
+        fetchCartCount,
+        wishlistIds,
+        setWishlistIds,
+        fetchWishlistIds,
+        loading
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

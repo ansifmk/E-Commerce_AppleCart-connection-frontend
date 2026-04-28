@@ -14,15 +14,24 @@ const HighlightProducts = () => {
   const fetchProducts = async () => {
     try {
       setLoading(true);
-      const response = await fetch("http://localhost:3001/products");
+
+      // ✅ CHANGED: API endpoint
+      const response = await fetch(
+        "https://localhost:7096/api/Products/highlighted",
+      );
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
+
       const data = await response.json();
-      const productsArray = data.products || data;
-      const highlightProducts = productsArray.filter((p) => p.highlight === true);
-      setProducts(highlightProducts);
+
+      // ✅ CHANGED: backend returns { success, message, data }
+      const productsArray = data.data || [];
+
+      // ❌ REMOVED: filter (backend already filtered)
+      setProducts(productsArray);
+
       setError(null);
     } catch (err) {
       console.error("Error fetching products:", err);
@@ -31,6 +40,8 @@ const HighlightProducts = () => {
       setLoading(false);
     }
   };
+
+  // 🔥 BELOW = EXACT SAME (NO STYLE CHANGE)
 
   if (loading) {
     return (
@@ -76,11 +87,14 @@ const HighlightProducts = () => {
           </div>
         </div>
       </section>
+
       <section className="bg-gray-50 py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {products.length === 0 ? (
             <div className="text-center py-12">
-              <p className="text-gray-600">No highlighted products available.</p>
+              <p className="text-gray-600">
+                No highlighted products available.
+              </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -93,29 +107,37 @@ const HighlightProducts = () => {
                   <div className="p-4 flex-1 flex flex-col">
                     <div className="aspect-square bg-gray-50 rounded-lg mb-4 overflow-hidden">
                       <img
-                        src={product.images && product.images[0] ? product.images[0] : '/placeholder-image.jpg'}
-                        alt={product.name}
+                        // ✅ CHANGED: backend field
+                        src={product.thumbnail || "/placeholder-image.jpg"}
+                        alt={product.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         onError={(e) => {
                           e.target.src = "/placeholder-image.jpg";
                         }}
                       />
                     </div>
+
                     <div className="flex-1 flex flex-col justify-between">
                       <div className="mb-4">
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-xs text-blue-600 font-medium bg-blue-50 px-2 py-1 rounded">
+                            {/* backend-il category illa → optional */}
                             {product.category}
                           </span>
                         </div>
+
                         <h3 className="font-medium text-gray-900 mb-2 line-clamp-2">
-                          {product.name}
+                          {/* ✅ CHANGED */}
+                          {product.title}
                         </h3>
+
                         <p className="text-sm text-gray-600 mb-2 line-clamp-2">
+                          {/* optional description */}
                           {product.description}
                         </p>
+
                         <p className="text-lg font-semibold text-gray-900">
-                          ₹{product.price.toLocaleString()}
+                          {/* ✅ SAME */}₹{product.price}
                         </p>
                       </div>
                     </div>

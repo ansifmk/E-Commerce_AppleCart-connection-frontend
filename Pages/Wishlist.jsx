@@ -1,76 +1,108 @@
 import React, { useContext, useEffect, useState } from "react";
-import axios from "axios";
+import axios from "../api/axiosInstance";
 import { useNavigate } from "react-router-dom";
 import { AuthContext } from "../Context/Authcontext";
-
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 const Wishlist = () => {
-  const { user, setUser } = useContext(AuthContext); 
+  const { user, setUser, wishlistIds, setWishlistIds, fetchCartCount } =
+    useContext(AuthContext);
   const [wishlistItems, setWishlistItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [cartIds, setCartIds] = useState([]);
   const navigate = useNavigate();
-
   useEffect(() => {
+    // 🔥 SCROLL TO TOP
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
     const fetchWishlist = async () => {
       try {
-        if (!user || !user.wishlist) return;
-        setWishlistItems(user.wishlist);
+        const res = await axios.get("/api/WishList");
+
+        setWishlistItems(
+          (res.data?.data || []).map((item) => ({
+            id: item.productId,
+            name: item.productName,
+            price: item.price,
+            images: [item.thumbnail],
+            count: 1,
+            description: "",
+            category: "",
+          })),
+        );
       } catch (err) {
         console.error("Error fetching wishlist:", err);
       } finally {
         setLoading(false);
       }
     };
-    fetchWishlist();
-  }, [user]);
 
+    fetchWishlist();
+  }, []);
   const removeFromWishlist = async (productId) => {
     try {
-      const updatedWishlist = wishlistItems.filter((item) => item.id !== productId);
-      await axios.put(`http://localhost:3001/users/${user.id}`, {
-        ...user,
-        wishlist: updatedWishlist,
-      });
-      setWishlistItems(updatedWishlist);
-      setUser({ ...user, wishlist: updatedWishlist });
-      localStorage.setItem(
-        "user",
-        JSON.stringify({ ...user, wishlist: updatedWishlist })
-      );
+      await axios.post(`/api/WishList/${productId}`);
+
+      setWishlistItems((prev) => prev.filter((item) => item.id !== productId));
+
+      setWishlistIds((prev) => prev.filter((id) => id !== productId));
+
+      toast.success("Removed from wishlist ❤️");
     } catch (err) {
-      console.error("Error removing from wishlist:", err);
+      console.error(err);
+      toast.error("Failed to remove");
     }
   };
-
   const addToCart = async (product) => {
+    if (!user) return toast.info("Please login first");
+
     try {
-      let updatedCart = user.cart || [];
-      const existingItem = updatedCart.find((item) => item.id === product.id);
-
-      if (existingItem) {
-        updatedCart = updatedCart.map((item) =>
-          item.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
-        );
-      } else {
-        updatedCart = [...updatedCart, { ...product, quantity: 1 }];
-      }
-
-      await axios.put(`http://localhost:3001/users/${user.id}`, {
-        ...user,
-        cart: updatedCart,
+      await axios.post("/api/Cart/add", {
+        productId: product.id,
+        Quantity: 1,
       });
 
-      const updatedUser = { ...user, cart: updatedCart };
-      setUser(updatedUser);
-      localStorage.setItem("user", JSON.stringify(updatedUser));
+      // update UI instantly
+      setCartIds((prev) =>
+        prev.includes(product.id) ? prev : [...prev, product.id],
+      );
+
+      fetchCartCount(); // update navbar
+
+      toast.success(`${product.name} added to cart`);
     } catch (err) {
-      console.error("Error adding to cart:", err);
+      console.error(err);
+      toast.error("Failed to add to cart");
     }
   };
+  const fetchCartIds = async () => {
+    try {
+      const res = await axios.get("/api/Cart/GetCartItems");
 
+      const items = res.data?.data?.items || [];
+
+      setCartIds(items.map((i) => i.productId));
+    } catch (err) {
+      console.error("Cart fetch error:", err);
+    }
+  };
+  useEffect(() => {
+    fetchCartIds();
+  }, []);
+  const addToWishlist = async (productId) => {
+    try {
+      await axios.post(`/api/WishList/${productId}`);
+
+      setWishlistIds((prev) => [...prev, productId]);
+
+      toast.success("Added to wishlist ❤️"); // ✅ ADD
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to add"); // ✅ ADD
+    }
+  };
   const isInCart = (productId) => {
-    return user?.cart?.some((item) => item.id === productId);
+    return cartIds.includes(productId);
   };
 
   if (loading)
@@ -85,13 +117,22 @@ const Wishlist = () => {
 
   if (!wishlistItems.length)
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <p className="text-gray-600 text-lg">Your wishlist is empty ❤️</p>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 space-y-4">
+        <p className="text-gray-600 text-lg">Your wishlist is empty </p>
+
+        <button
+          onClick={() => navigate("/products")}
+          className="bg-black text-white px-6 py-2 rounded-full hover:bg-gray-800 transition"
+        >
+          Go to Products
+        </button>
       </div>
     );
 
   return (
     <div className="min-h-screen bg-gray-50 py-12">
+      <ToastContainer position="top-right" autoClose={2000} />
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <h2 className="text-2xl font-bold mb-8">My Wishlist</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -116,7 +157,9 @@ const Wishlist = () => {
                       {product.category}
                     </span>
                     <span className="text-xs text-gray-500">
-                      {product.count > 0 ? `${product.count} in stock` : "Out of stock"}
+                      {product.count > 0
+                        ? `${product.count} in stock`
+                        : "Out of stock"}
                     </span>
                   </div>
                   <h3 className="font-medium text-gray-900 mb-2 line-clamp-2">
@@ -144,6 +187,8 @@ const Wishlist = () => {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
+                        e.preventDefault(); // 🔥 ADD THIS
+
                         addToCart(product);
                       }}
                       className="flex-1 py-2.5 px-4 rounded-full text-sm font-medium bg-black text-white hover:bg-gray-600 transition-colors"
@@ -154,6 +199,8 @@ const Wishlist = () => {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
+                      e.preventDefault(); // ✅ ADD THIS
+
                       removeFromWishlist(product.id);
                     }}
                     className="flex-1 py-2.5 px-4 rounded-full text-sm font-medium bg-red-500 text-white hover:bg-red-600 transition-colors"
