@@ -25,10 +25,10 @@ const AdminLayout = () => {
       }`}
     >
       <div className="fixed top-0 left-0 h-screen z-50">
-        <Sidebar 
-          expanded={expanded} 
-          setExpanded={setExpanded} 
-          isDark={isDark} 
+        <Sidebar
+          expanded={expanded}
+          setExpanded={setExpanded}
+          isDark={isDark}
           setIsDark={setIsDark}
         />
       </div>
@@ -40,7 +40,10 @@ const AdminLayout = () => {
         <Routes>
           <Route path="/" element={<AdminDashboard isDark={isDark} />} />
           <Route path="/users" element={<AdminUsers isDark={isDark} />} />
-          <Route path="/products" element={<ProductsManagement isDark={isDark} />} />
+          <Route
+            path="/products"
+            element={<ProductsManagement isDark={isDark} />}
+          />
           <Route path="/orders" element={<OrderManagement isDark={isDark} />} />
         </Routes>
       </div>

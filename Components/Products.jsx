@@ -19,7 +19,22 @@ const Products = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const pageFromUrl = parseInt(searchParams.get("page")) || 1;
   const [pageNumber, setPageNumber] = useState(pageFromUrl);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 const [hasMore, setHasMore] = useState(true);
+
+
+useEffect(() => {
+  setPageNumber(1);
+}, [debouncedSearch, category, price]);
+
+useEffect(() => {
+  const timer = setTimeout(() => {
+    setDebouncedSearch(search);
+  }, 500); // wait 500ms after typing
+
+  return () => clearTimeout(timer);
+}, [search]);
+
   useEffect(() => {
     setSearchParams({ page: pageNumber });
   }, [pageNumber]);
@@ -31,7 +46,7 @@ const [hasMore, setHasMore] = useState(true);
 
   useEffect(() => {
     fetchProducts();
-  }, [pageNumber, search, category, price]); // 🔥 added dependencies
+  }, [pageNumber, debouncedSearch, category, price]); // 🔥 added dependencies
   const fetchCartIds = async () => {
     try {
       const res = await axios.get("/api/Cart/GetCartItems");
@@ -63,7 +78,7 @@ setHasMore(items.length === pageSize);
 
     // current page
     const res = await axios.get("/api/Products/GetproductsCombined", {
-      params: { pageNumber, pageSize, search, category, sortBy: price },
+      params: { pageNumber, pageSize, search: debouncedSearch, category, sortBy: price },
     });
 
     const items = res.data?.data?.items || [];
@@ -79,8 +94,7 @@ setHasMore(items.length === pageSize);
 
     // 🔥 CHECK NEXT PAGE
     const nextRes = await axios.get("/api/Products/GetproductsCombined", {
-      params: { pageNumber: pageNumber + 1, pageSize, search, category, sortBy: price },
-    });
+params: { pageNumber: pageNumber + 1, pageSize, search: debouncedSearch, category, sortBy: price }    });
 
     const nextItems = nextRes.data?.data?.items || [];
 
@@ -159,16 +173,7 @@ setHasMore(items.length === pageSize);
       toast.error("Failed to add to cart");
     }
   };
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading products...</p>
-        </div>
-      </div>
-    );
-  }
+
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -233,36 +238,46 @@ setHasMore(items.length === pageSize);
           </div>
         </div>
       </section>
+<section className="bg-gray-50 py-16">
+  <div className="max-w-7xl mx-auto px-4">
 
-      <section className="bg-gray-50 py-16">
-        <div className="max-w-7xl mx-auto px-4">
-          {products.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-gray-600">No products found.</p>
-              {(category || price || search) && (
-                <button
-                  onClick={() => {
-                    setCategory("");
-                    setPrice("");
-                    setSearch("");
-                  }}
-                  className="mt-4 bg-black text-white px-4 py-2 rounded-md hover:bg-gray-800"
-                >
-                  Clear Filters
-                </button>
-              )}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {products.map((product) => {
-                const isInWishlist = wishlistIds.includes(product.id);
-                const isInCart = cartIds.includes(product.id);
-                return (
-                  <div
-                    key={product.id}
-                    className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow group cursor-pointer flex flex-col relative"
-                    onClick={() => navigate(`/product/${product.id}`)}
-                  >
+    {/* 🔥 LOADING INSIDE PAGE (NOT FULL RETURN) */}
+    {loading ? (
+      <div className="flex justify-center py-20">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black"></div>
+      </div>
+    ) : products.length === 0 ? (
+
+      <div className="text-center py-12">
+        <p className="text-gray-600">No products found.</p>
+        {(category || price || search) && (
+          <button
+            onClick={() => {
+              setCategory("");
+              setPrice("");
+              setSearch("");
+            }}
+            className="mt-4 bg-black text-white px-4 py-2 rounded-md hover:bg-gray-800"
+          >
+            Clear Filters
+          </button>
+        )}
+      </div>
+
+    ) : (
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        {products.map((product) => {
+          const isInWishlist = wishlistIds.includes(product.id);
+          const isInCart = cartIds.includes(product.id);
+
+          return (
+            <div
+              key={product.id}
+              className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow group cursor-pointer flex flex-col relative"
+              onClick={() => navigate(`/product/${product.id}`)}
+            >
+              {/* YOUR EXISTING CARD CODE SAME */}
                     <button
                       onClick={(e) => {
                         e.stopPropagation(); // ✅ stop card click
