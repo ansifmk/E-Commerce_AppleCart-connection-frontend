@@ -13,32 +13,30 @@ const Products = () => {
   const [category, setCategory] = useState("");
   const [price, setPrice] = useState("");
   const [cartIds, setCartIds] = useState([]);
-  // const [wishlistIds, setWishlistIds] = useState([]);
   const navigate = useNavigate();
-  const { user, setUser, fetchCartCount, wishlistIds, setWishlistIds } =useContext(AuthContext);
+  const { user, fetchCartCount, wishlistIds, setWishlistIds } = useContext(AuthContext);
   const [searchParams, setSearchParams] = useSearchParams();
   const pageFromUrl = parseInt(searchParams.get("page")) || 1;
   const [pageNumber, setPageNumber] = useState(pageFromUrl);
   const [debouncedSearch, setDebouncedSearch] = useState("");
-const [hasMore, setHasMore] = useState(true);
+  const [hasMore, setHasMore] = useState(true);
+  const pageSize = 12;
+  const ROW_SIZE = 4; // products per horizontal row on mobile
 
+  useEffect(() => {
+    setPageNumber(1);
+  }, [debouncedSearch, category, price]);
 
-useEffect(() => {
-  setPageNumber(1);
-}, [debouncedSearch, category, price]);
-
-useEffect(() => {
-  const timer = setTimeout(() => {
-    setDebouncedSearch(search);
-  }, 500); // wait 500ms after typing
-
-  return () => clearTimeout(timer);
-}, [search]);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   useEffect(() => {
     setSearchParams({ page: pageNumber });
   }, [pageNumber]);
-  const pageSize = 12;
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -46,74 +44,58 @@ useEffect(() => {
 
   useEffect(() => {
     fetchProducts();
-  }, [pageNumber, debouncedSearch, category, price]); // 🔥 added dependencies
+  }, [pageNumber, debouncedSearch, category, price]);
+
   const fetchCartIds = async () => {
     try {
       const res = await axios.get("/api/Cart/GetCartItems");
-
-const items = res.data?.data?.items || [];
-
-setProducts(
-  items.map((item) => ({
-    ...item,
-    name: item.title,
-    images: [item.thumbnail],
-    count: item.stock,
-  }))
-);
-
-// 🔥 IMPORTANT LOGIC
-setHasMore(items.length === pageSize);
+      const items = res.data?.data?.items || [];
       setCartIds(items.map((i) => i.productId));
     } catch (err) {
       console.error("Cart fetch error:", err);
     }
   };
+
   useEffect(() => {
     fetchCartIds();
   }, []);
- const fetchProducts = async () => {
-  try {
-    setLoading(true);
 
-    // current page
-    const res = await axios.get("/api/Products/GetproductsCombined", {
-      params: { pageNumber, pageSize, search: debouncedSearch, category, sortBy: price },
-    });
+  const fetchProducts = async () => {
+    try {
+      setLoading(true);
+      const res = await axios.get("/api/Products/GetproductsCombined", {
+        params: { pageNumber, pageSize, search: debouncedSearch, category, sortBy: price },
+      });
 
-    const items = res.data?.data?.items || [];
+      const items = res.data?.data?.items || [];
 
-    setProducts(
-      items.map((item) => ({
-        ...item,
-        name: item.title,
-        images: [item.thumbnail],
-        count: item.stock,
-      }))
-    );
+      setProducts(
+        items.map((item) => ({
+          ...item,
+          name: item.title,
+          images: [item.thumbnail],
+          count: item.stock,
+        }))
+      );
 
-    // 🔥 CHECK NEXT PAGE
-    const nextRes = await axios.get("/api/Products/GetproductsCombined", {
-params: { pageNumber: pageNumber + 1, pageSize, search: debouncedSearch, category, sortBy: price }    });
+      const nextRes = await axios.get("/api/Products/GetproductsCombined", {
+        params: { pageNumber: pageNumber + 1, pageSize, search: debouncedSearch, category, sortBy: price }
+      });
 
-    const nextItems = nextRes.data?.data?.items || [];
-
-    setHasMore(nextItems.length > 0); // ✅ ONLY if next page has data
-
-  } catch (err) {
-    console.error(err);
-    toast.error("Failed to load products");
-  } finally {
-    setLoading(false);
-  }
-};
+      const nextItems = nextRes.data?.data?.items || [];
+      setHasMore(nextItems.length > 0);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to load products");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchWishlistIds = async () => {
     try {
       const res = await axios.get("/api/WishList");
-
       const items = res.data?.data || [];
-
       setWishlistIds(items.map((i) => i.productId));
     } catch (err) {
       console.error("Wishlist fetch error:", err);
@@ -123,22 +105,17 @@ params: { pageNumber: pageNumber + 1, pageSize, search: debouncedSearch, categor
   useEffect(() => {
     fetchWishlistIds();
   }, []);
+
   const toggleWishlist = async (productId) => {
     if (!user) return toast.info("Please login first");
-
     const isAlreadyInWishlist = wishlistIds.includes(productId);
-
     try {
       await axios.post(`/api/WishList/${productId}`);
-
-      // ✅ Update UI instantly
       setWishlistIds((prev) =>
         isAlreadyInWishlist
           ? prev.filter((id) => id !== productId)
           : [...prev, productId],
       );
-
-      // 🔥 Show correct toast
       toast[isAlreadyInWishlist ? "warning" : "success"](
         isAlreadyInWishlist
           ? "Removed from wishlist 💔"
@@ -152,21 +129,15 @@ params: { pageNumber: pageNumber + 1, pageSize, search: debouncedSearch, categor
 
   const addToCart = async (product, e) => {
     e.stopPropagation();
-
     if (!user) return toast.info("Please login first");
     if (product.count === 0) return toast.warning("Out of stock");
-
     try {
-      const res = await axios.post("/api/Cart/add", {
+      await axios.post("/api/Cart/add", {
         productId: product.id,
         Quantity: 1,
       });
-
-      // 🔥 FIX START (VERY IMPORTANT)
-      setCartIds((prev) => [...prev, product.id]); // update button instantly
-      fetchCartCount(); // update navbar instantly
-      // 🔥 FIX END
-
+      setCartIds((prev) => [...prev, product.id]);
+      fetchCartCount();
       toast.success(`${product.name} added to cart`);
     } catch (err) {
       console.error(err);
@@ -174,11 +145,108 @@ params: { pageNumber: pageNumber + 1, pageSize, search: debouncedSearch, categor
     }
   };
 
+  // Split products into rows for mobile horizontal scroll
+  const rows = [];
+  for (let i = 0; i < products.length; i += ROW_SIZE) {
+    rows.push(products.slice(i, i + ROW_SIZE));
+  }
+
+  const ProductCard = ({ product }) => {
+    const isInWishlist = wishlistIds.includes(product.id);
+    const isInCart = cartIds.includes(product.id);
+
+    return (
+      <div
+        className="flex-shrink-0 w-[280px] snap-start"
+        onClick={() => navigate(`/product/${product.id}`)}
+      >
+        <div className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow group cursor-pointer flex flex-col relative h-full">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleWishlist(product.id);
+            }}
+            className="absolute top-3 right-3 p-2 rounded-full bg-white shadow z-10"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className={`h-6 w-6 ${
+                isInWishlist
+                  ? "text-red-500 fill-current"
+                  : "text-gray-400"
+              }`}
+              viewBox="0 0 24 24"
+              fill="currentColor"
+            >
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+            </svg>
+          </button>
+
+          <div className="p-4 flex-1 flex flex-col">
+            <div className="aspect-square bg-gray-50 rounded-lg mb-4 overflow-hidden">
+              <img
+                src={product.images?.[0] || "/placeholder-image.jpg"}
+                alt={product.name}
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                onError={(e) => (e.target.src = "/placeholder-image.jpg")}
+              />
+            </div>
+
+            <div className="flex-1 flex flex-col justify-between">
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                    {product.category}
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    {product.count > 0
+                      ? `${product.count} in stock`
+                      : "Out of stock"}
+                  </span>
+                </div>
+                <h3 className="font-medium text-gray-900 mb-2 line-clamp-2">
+                  {product.name}
+                </h3>
+                <p className="text-sm text-gray-600 mb-2 line-clamp-2">
+                  {product.description}
+                </p>
+                <p className="text-lg font-semibold text-gray-900">
+                  ₹{product.price.toLocaleString()}
+                </p>
+              </div>
+
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (isInCart) {
+                    navigate("/cart");
+                  } else {
+                    addToCart(product, e);
+                  }
+                }}
+                disabled={product.count === 0}
+                className={`w-full py-2.5 px-4 rounded-full text-sm font-medium transition-colors ${
+                  product.count === 0
+                    ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                    : isInCart
+                      ? "bg-green-600 text-white hover:bg-green-700"
+                      : "bg-black text-white hover:bg-gray-800"
+                }`}
+              >
+                {isInCart ? "Go to Cart" : "Add to Cart"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
       <ToastContainer position="top-right" autoClose={3000} />
 
+      {/* Hero section (unchanged) */}
       <section
         className="bg-white py-16 shadow-sm relative"
         style={{
@@ -238,155 +306,78 @@ params: { pageNumber: pageNumber + 1, pageSize, search: debouncedSearch, categor
           </div>
         </div>
       </section>
-<section className="bg-gray-50 py-16">
-  <div className="max-w-7xl mx-auto px-4">
 
-    {/* 🔥 LOADING INSIDE PAGE (NOT FULL RETURN) */}
-    {loading ? (
-      <div className="flex justify-center py-20">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black"></div>
-      </div>
-    ) : products.length === 0 ? (
-
-      <div className="text-center py-12">
-        <p className="text-gray-600">No products found.</p>
-        {(category || price || search) && (
-          <button
-            onClick={() => {
-              setCategory("");
-              setPrice("");
-              setSearch("");
-            }}
-            className="mt-4 bg-black text-white px-4 py-2 rounded-md hover:bg-gray-800"
-          >
-            Clear Filters
-          </button>
-        )}
-      </div>
-
-    ) : (
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {products.map((product) => {
-          const isInWishlist = wishlistIds.includes(product.id);
-          const isInCart = cartIds.includes(product.id);
-
-          return (
-            <div
-              key={product.id}
-              className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow group cursor-pointer flex flex-col relative"
-              onClick={() => navigate(`/product/${product.id}`)}
-            >
-              {/* YOUR EXISTING CARD CODE SAME */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation(); // ✅ stop card click
-                        e.preventDefault(); // ✅ prevent navigation
-                        toggleWishlist(product.id); // ✅ FIXED
-                      }}
-                      className="absolute top-3 right-3 p-2 rounded-full bg-white shadow z-10"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className={`h-6 w-6 ${
-                          isInWishlist
-                            ? "text-red-500 fill-current"
-                            : "text-gray-400"
-                        }`}
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                      >
-                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-                      </svg>
-                    </button>
-
-                    <div className="p-4 flex-1 flex flex-col">
-                      <div className="aspect-square bg-gray-50 rounded-lg mb-4 overflow-hidden">
-                        <img
-                          src={product.images?.[0] || "/placeholder-image.jpg"}
-                          alt={product.name}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                          onError={(e) =>
-                            (e.target.src = "/placeholder-image.jpg")
-                          }
-                        />
-                      </div>
-
-                      <div className="flex-1 flex flex-col justify-between">
-                        <div className="mb-4">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
-                              {product.category}
-                            </span>
-                            <span className="text-xs text-gray-500">
-                              {product.count > 0
-                                ? `${product.count} in stock`
-                                : "Out of stock"}
-                            </span>
-                          </div>
-                          <h3 className="font-medium text-gray-900 mb-2 line-clamp-2">
-                            {product.name}
-                          </h3>
-                          <p className="text-sm text-gray-600 mb-2 line-clamp-2">
-                            {product.description}
-                          </p>
-                          <p className="text-lg font-semibold text-gray-900">
-                            ₹{product.price.toLocaleString()}
-                          </p>
-                        </div>
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            e.preventDefault(); // 🔥 ADD THIS
-
-                            if (isInCart) {
-                              navigate("/cart");
-                            } else {
-                              addToCart(product, e);
-                            }
-                          }}
-                          disabled={product.count === 0}
-                          className={`w-full py-2.5 px-4 rounded-full text-sm font-medium transition-colors ${
-                            product.count === 0
-                              ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                              : isInCart
-                                ? "bg-green-600 text-white hover:bg-green-700"
-                                : "bg-black text-white hover:bg-gray-800"
-                          }`}
-                        >
-                          {isInCart ? "Go to Cart" : "Add to Cart"}
-                        </button>
-                      </div>
+      {/* Products section */}
+      <section className="bg-gray-50 py-16">
+        <div className="max-w-7xl mx-auto px-4">
+          {loading ? (
+            <div className="flex justify-center py-20">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black"></div>
+            </div>
+          ) : products.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-gray-600">No products found.</p>
+              {(category || price || search) && (
+                <button
+                  onClick={() => {
+                    setCategory("");
+                    setPrice("");
+                    setSearch("");
+                  }}
+                  className="mt-4 bg-black text-white px-4 py-2 rounded-md hover:bg-gray-800"
+                >
+                  Clear Filters
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              {/* Mobile: Multiple horizontal scroll rows (stacked vertically) */}
+              <div className="block md:hidden space-y-8">
+                {rows.map((row, rowIndex) => (
+                  <div key={rowIndex} className="overflow-x-auto overflow-y-visible pb-2 -mx-4 px-4">
+                    <div className="flex gap-4 snap-x snap-mandatory">
+                      {row.map((product) => (
+                        <ProductCard key={product.id} product={product} />
+                      ))}
                     </div>
                   </div>
-                );
-              })}
+                ))}
+              </div>
+
+              {/* Desktop: Normal grid layout */}
+              <div className="hidden md:grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {products.map((product) => (
+                  <ProductCard key={product.id} product={product} />
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* Pagination */}
+          {!loading && products.length > 0 && (
+            <div className="flex justify-center mt-10 gap-4">
+              <button
+                onClick={() => setPageNumber(pageNumber - 1)}
+                disabled={pageNumber === 1}
+                className="px-4 py-2 bg-black text-white rounded disabled:bg-gray-300 disabled:cursor-not-allowed"
+              >
+                Prev
+              </button>
+              <span className="px-4 py-2">Page {pageNumber}</span>
+              <button
+                onClick={() => setPageNumber(pageNumber + 1)}
+                disabled={!hasMore}
+                className={`px-4 py-2 rounded ${
+                  hasMore ? "bg-black text-white" : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                }`}
+              >
+                Next
+              </button>
             </div>
           )}
         </div>
       </section>
-      <div className="flex justify-center mt-10 gap-4">
-        <button
-          onClick={() => setPageNumber(pageNumber - 1)}
-          disabled={pageNumber === 1}
-          className="px-4 py-2 bg-black text-white rounded"
-        >
-          Prev
-        </button>
-
-        <span className="px-4 py-2">Page {pageNumber}</span>
-
-     <button
-  onClick={() => setPageNumber(pageNumber + 1)}
-  disabled={!hasMore}
-  className={`px-4 py-2 rounded ${
-    hasMore ? "bg-black text-white" : "bg-gray-300 text-gray-500 cursor-not-allowed"
-  }`}
->
-  Next
-</button>
-      </div>
     </div>
   );
 };
