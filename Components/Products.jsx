@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext } from "react";
+import React, { useEffect, useState, useContext, useRef } from "react";
 import axios from "../api/axiosInstance";
 import { useNavigate } from "react-router-dom";
 import { AuthContext } from "../Context/Authcontext";
@@ -10,9 +10,10 @@ const Products = () => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("");
-  const [price, setPrice] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("");
+  const [sortBy, setSortBy] = useState("");
   const [cartIds, setCartIds] = useState([]);
+  const [showBackToTop, setShowBackToTop] = useState(false);
   const navigate = useNavigate();
   const { user, fetchCartCount, wishlistIds, setWishlistIds } = useContext(AuthContext);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -20,17 +21,38 @@ const Products = () => {
   const [pageNumber, setPageNumber] = useState(pageFromUrl);
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [hasMore, setHasMore] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
   const pageSize = 12;
-  const ROW_SIZE = 4; // products per horizontal row on mobile
+  const ROW_SIZE = 4;
+
+  const categories = [
+    { value: "", label: "All Categories" },
+    { value: "Smartphone", label: "iPhone" },
+    { value: "Laptop", label: "MacBook" },
+    { value: "Smartwatch", label: "Apple Watch" },
+    { value: "Earbuds", label: "AirPods" },
+    { value: "Headphones", label: "AirPods Max" },
+  ];
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    const handleScroll = () => setShowBackToTop(window.scrollY > 400);
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   useEffect(() => {
     setPageNumber(1);
-  }, [debouncedSearch, category, price]);
+  }, [debouncedSearch, selectedCategory, sortBy]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(search);
-    }, 500);
+    const timer = setTimeout(() => setDebouncedSearch(search), 400);
     return () => clearTimeout(timer);
   }, [search]);
 
@@ -44,7 +66,7 @@ const Products = () => {
 
   useEffect(() => {
     fetchProducts();
-  }, [pageNumber, debouncedSearch, category, price]);
+  }, [pageNumber, debouncedSearch, selectedCategory, sortBy]);
 
   const fetchCartIds = async () => {
     try {
@@ -64,11 +86,9 @@ const Products = () => {
     try {
       setLoading(true);
       const res = await axios.get("/api/Products/GetproductsCombined", {
-        params: { pageNumber, pageSize, search: debouncedSearch, category, sortBy: price },
+        params: { pageNumber, pageSize, search: debouncedSearch, category: selectedCategory, sortBy },
       });
-
       const items = res.data?.data?.items || [];
-
       setProducts(
         items.map((item) => ({
           ...item,
@@ -77,11 +97,9 @@ const Products = () => {
           count: item.stock,
         }))
       );
-
       const nextRes = await axios.get("/api/Products/GetproductsCombined", {
-        params: { pageNumber: pageNumber + 1, pageSize, search: debouncedSearch, category, sortBy: price }
+        params: { pageNumber: pageNumber + 1, pageSize, search: debouncedSearch, category: selectedCategory, sortBy },
       });
-
       const nextItems = nextRes.data?.data?.items || [];
       setHasMore(nextItems.length > 0);
     } catch (err) {
@@ -112,14 +130,10 @@ const Products = () => {
     try {
       await axios.post(`/api/WishList/${productId}`);
       setWishlistIds((prev) =>
-        isAlreadyInWishlist
-          ? prev.filter((id) => id !== productId)
-          : [...prev, productId],
+        isAlreadyInWishlist ? prev.filter((id) => id !== productId) : [...prev, productId]
       );
       toast[isAlreadyInWishlist ? "warning" : "success"](
-        isAlreadyInWishlist
-          ? "Removed from wishlist 💔"
-          : "Added to wishlist ❤️",
+        isAlreadyInWishlist ? "Removed from wishlist 💔" : "Added to wishlist ❤️"
       );
     } catch (err) {
       console.error(err);
@@ -132,10 +146,7 @@ const Products = () => {
     if (!user) return toast.info("Please login first");
     if (product.count === 0) return toast.warning("Out of stock");
     try {
-      await axios.post("/api/Cart/add", {
-        productId: product.id,
-        Quantity: 1,
-      });
+      await axios.post("/api/Cart/add", { productId: product.id, Quantity: 1 });
       setCartIds((prev) => [...prev, product.id]);
       fetchCartCount();
       toast.success(`${product.name} added to cart`);
@@ -145,36 +156,64 @@ const Products = () => {
     }
   };
 
-  // Split products into rows for mobile horizontal scroll
+  const clearFilters = () => {
+    setSelectedCategory("");
+    setSortBy("");
+    setSearch("");
+  };
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const rows = [];
   for (let i = 0; i < products.length; i += ROW_SIZE) {
     rows.push(products.slice(i, i + ROW_SIZE));
   }
 
-  const ProductCard = ({ product }) => {
+  const LoadingSkeleton = () => (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      {[...Array(8)].map((_, idx) => (
+        <div key={idx} className="bg-white rounded-2xl shadow-sm p-4 animate-pulse">
+          <div className="aspect-square bg-gray-200 rounded-xl mb-4"></div>
+          <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+          <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
+          <div className="h-6 bg-gray-200 rounded w-1/3"></div>
+        </div>
+      ))}
+    </div>
+  );
+
+  const ProductCard = ({ product, index }) => {
     const isInWishlist = wishlistIds.includes(product.id);
     const isInCart = cartIds.includes(product.id);
 
     return (
       <div
-        className="flex-shrink-0 w-[280px] snap-start"
+        className="flex-shrink-0 w-[280px] md:w-auto snap-start transform transition-all duration-300 hover:-translate-y-1 hover:shadow-xl"
         onClick={() => navigate(`/product/${product.id}`)}
       >
-        <div className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow group cursor-pointer flex flex-col relative h-full">
+        <div className="bg-white rounded-2xl shadow-md hover:shadow-2xl transition-shadow duration-300 group cursor-pointer flex flex-col relative h-full overflow-hidden border border-gray-100">
+          {/* Only "Sold Out" badge – "New" badge removed */}
+          <div className="absolute top-3 left-3 z-20 flex gap-2">
+            {product.count === 0 && (
+              <span className="bg-red-500 text-white text-xs font-semibold px-2.5 py-1 rounded-full shadow-md">
+                Sold Out
+              </span>
+            )}
+          </div>
+
+          {/* Wishlist button */}
           <button
             onClick={(e) => {
               e.stopPropagation();
               toggleWishlist(product.id);
             }}
-            className="absolute top-3 right-3 p-2 rounded-full bg-white shadow z-10"
+            className="absolute top-3 right-3 p-2 rounded-full bg-white/90 backdrop-blur-sm shadow-md z-20 transition-transform hover:scale-110"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              className={`h-6 w-6 ${
-                isInWishlist
-                  ? "text-red-500 fill-current"
-                  : "text-gray-400"
-              }`}
+              className={`h-5 w-5 transition-colors ${isInWishlist ? "text-red-500 fill-current" : "text-gray-500"}`}
               viewBox="0 0 24 24"
               fill="currentColor"
             >
@@ -183,57 +222,48 @@ const Products = () => {
           </button>
 
           <div className="p-4 flex-1 flex flex-col">
-            <div className="aspect-square bg-gray-50 rounded-lg mb-4 overflow-hidden">
+            <div className="aspect-square bg-gray-50 rounded-xl mb-4 overflow-hidden">
               <img
                 src={product.images?.[0] || "/placeholder-image.jpg"}
                 alt={product.name}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 onError={(e) => (e.target.src = "/placeholder-image.jpg")}
               />
             </div>
 
             <div className="flex-1 flex flex-col justify-between">
-              <div className="mb-4">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium text-blue-700 bg-blue-50 px-2.5 py-1 rounded-full">
                     {product.category}
                   </span>
                   <span className="text-xs text-gray-500">
-                    {product.count > 0
-                      ? `${product.count} in stock`
-                      : "Out of stock"}
+                    {product.count > 0 ? `${product.count} left` : "Out"}
                   </span>
                 </div>
-                <h3 className="font-medium text-gray-900 mb-2 line-clamp-2">
+                <h3 className="font-semibold text-gray-900 mb-1 line-clamp-2 group-hover:text-blue-600 transition">
                   {product.name}
                 </h3>
-                <p className="text-sm text-gray-600 mb-2 line-clamp-2">
-                  {product.description}
-                </p>
-                <p className="text-lg font-semibold text-gray-900">
-                  ₹{product.price.toLocaleString()}
-                </p>
+                <p className="text-sm text-gray-500 mb-3 line-clamp-2">{product.description}</p>
+                <p className="text-xl font-bold text-gray-900">₹{product.price.toLocaleString()}</p>
               </div>
 
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (isInCart) {
-                    navigate("/cart");
-                  } else {
-                    addToCart(product, e);
-                  }
+                  if (isInCart) navigate("/cart");
+                  else addToCart(product, e);
                 }}
                 disabled={product.count === 0}
-                className={`w-full py-2.5 px-4 rounded-full text-sm font-medium transition-colors ${
+                className={`mt-4 w-full py-2.5 px-4 rounded-xl text-sm font-semibold transition-all transform active:scale-95 ${
                   product.count === 0
-                    ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                     : isInCart
-                      ? "bg-green-600 text-white hover:bg-green-700"
-                      : "bg-black text-white hover:bg-gray-800"
+                    ? "bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
+                    : "bg-slate-900 text-white hover:bg-slate-800 shadow-sm"
                 }`}
               >
-                {isInCart ? "Go to Cart" : "Add to Cart"}
+                {isInCart ? "Go to Cart →" : "Add to Cart +"}
               </button>
             </div>
           </div>
@@ -243,112 +273,128 @@ const Products = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-gray-100">
       <ToastContainer position="top-right" autoClose={3000} />
 
-      {/* Hero section (unchanged) */}
+      {/* Hero Section */}
       <section
-        className="bg-white py-16 shadow-sm relative"
+        className="relative overflow-hidden"
         style={{
-          backgroundImage: "url('/hero_endframe__xdzisdq1ppem_xlarge_2x.jpg')",
+          backgroundImage: isMobile ? "none" : "url('/hero_endframe__xdzisdq1ppem_xlarge_2x.jpg')",
           backgroundSize: "cover",
           backgroundPosition: "center",
-          minHeight: "200px",
         }}
       >
-        <div className="absolute inset-0 bg-white/70"></div>
-        <div className="relative max-w-7xl mx-auto px-4">
-          <div className="text-center py-8">
-            <h1 className="text-4xl font-light text-gray-900 mb-4">
-              All Products
-            </h1>
-            <p className="text-lg text-gray-600">
-              Explore our complete range of Apple products
-            </p>
-            <p className="text-sm text-gray-500 mt-2">
-              {products.length} products available
-            </p>
+        {isMobile ? (
+          <div className="absolute inset-0 bg-gradient-to-br from-slate-100 via-white to-blue-50"></div>
+        ) : (
+          <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px]"></div>
+        )}
 
-            <div className="w-full max-w-2xl mx-auto mt-8">
+        <div className="relative max-w-7xl mx-auto px-4 py-10 md:py-16 text-center">
+          <h1 className="text-3xl md:text-5xl font-bold bg-gradient-to-r from-slate-900 to-slate-600 bg-clip-text text-transparent mb-2">
+            All Products
+          </h1>
+          <p className="text-gray-600 text-md md:text-lg mb-1">Discover the latest Apple technology</p>
+          <p className="text-sm text-gray-400 mb-6">{products.length} premium products available</p>
+
+          {/* Search Bar */}
+          <div className="max-w-2xl mx-auto mb-6 px-2">
+            <div className="relative">
               <input
                 type="text"
-                placeholder="Search products..."
-                className="block w-full px-4 py-3 bg-white rounded-full shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Search for iPhone, MacBook, Apple Watch..."
+                className="w-full pl-12 pr-4 py-3 md:py-4 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-2xl shadow-lg focus:outline-none focus:ring-2 focus:ring-black-400 transition-all text-sm md:text-base"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
-            </div>
-
-            <div className="flex justify-center mt-6 gap-4 flex-wrap">
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">All Categories</option>
-                <option value="Smartphone">iPhone</option>
-                <option value="Laptop">MacBook</option>
-                <option value="Smartwatch">Apple Watch</option>
-                <option value="Earbuds">AirPods</option>
-                <option value="Headphones">AirPods Max</option>
-              </select>
-
-              <select
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">All Prices</option>
-                <option value="priceAsc">Low to High</option>
-                <option value="priceDesc">High to Low</option>
-              </select>
+              <svg className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
             </div>
           </div>
-        </div>
-      </section>
 
-      {/* Products section */}
-      <section className="bg-gray-50 py-16">
-        <div className="max-w-7xl mx-auto px-4">
-          {loading ? (
-            <div className="flex justify-center py-20">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black"></div>
-            </div>
-          ) : products.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-gray-600">No products found.</p>
-              {(category || price || search) && (
+          {/* Category Chips + Sort Row */}
+          <div className="flex flex-col items-center gap-4">
+            <div className="flex flex-wrap justify-center gap-2 max-w-4xl mx-auto px-2">
+              {categories.map((cat) => (
                 <button
-                  onClick={() => {
-                    setCategory("");
-                    setPrice("");
-                    setSearch("");
-                  }}
-                  className="mt-4 bg-black text-white px-4 py-2 rounded-md hover:bg-gray-800"
+                  key={cat.value}
+                  onClick={() => setSelectedCategory(cat.value)}
+                  className={`px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
+                    selectedCategory === cat.value
+                      ? "bg-slate-900 text-white shadow-md"
+                      : "bg-white/80 text-gray-700 hover:bg-gray-100 border border-gray-200"
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-3 items-center">
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="px-4 py-2 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-black-400 cursor-pointer text-sm"
+              >
+                <option value="">Sort by Price</option>
+                <option value="priceAsc">Price: Low to High</option>
+                <option value="priceDesc">Price: High to Low</option>
+              </select>
+              {(selectedCategory || sortBy || search) && (
+                <button
+                  onClick={clearFilters}
+                  className="px-4 py-2 bg-gray-800 text-white rounded-xl hover:bg-gray-700 transition shadow-sm text-sm"
                 >
                   Clear Filters
                 </button>
               )}
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Products Section */}
+      <section className="py-12 md:py-20">
+        <div className="max-w-7xl mx-auto px-4">
+          {loading ? (
+            <LoadingSkeleton />
+          ) : products.length === 0 ? (
+            <div className="text-center py-20 bg-white rounded-3xl shadow-sm">
+              <svg className="mx-auto h-20 w-20 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="text-gray-500 mt-4">No products match your criteria.</p>
+              <button
+                onClick={clearFilters}
+                className="mt-6 bg-slate-900 text-white px-6 py-2 rounded-xl hover:bg-slate-800 transition shadow-md"
+              >
+                Clear all filters
+              </button>
+            </div>
           ) : (
             <>
-              {/* Mobile: Multiple horizontal scroll rows (stacked vertically) */}
+              {/* Mobile: Horizontal scroll rows - scrollbar hidden */}
               <div className="block md:hidden space-y-8">
                 {rows.map((row, rowIndex) => (
-                  <div key={rowIndex} className="overflow-x-auto overflow-y-visible pb-2 -mx-4 px-4">
-                    <div className="flex gap-4 snap-x snap-mandatory">
-                      {row.map((product) => (
-                        <ProductCard key={product.id} product={product} />
-                      ))}
+                  <div key={rowIndex}>
+                    <div className="overflow-x-auto overflow-y-visible pb-3 -mx-4 px-4 hide-scrollbar">
+                      <div className="flex gap-5 snap-x snap-mandatory">
+                        {row.map((product, idx) => (
+                          <ProductCard key={product.id} product={product} index={idx} />
+                        ))}
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
 
-              {/* Desktop: Normal grid layout */}
-              <div className="hidden md:grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {products.map((product) => (
-                  <ProductCard key={product.id} product={product} />
+              {/* Desktop: Grid layout */}
+              <div className="hidden md:grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-7">
+                {products.map((product, idx) => (
+                  <div key={product.id} className="animate-fadeInUp" style={{ animationDelay: `${idx * 30}ms` }}>
+                    <ProductCard product={product} index={idx} />
+                  </div>
                 ))}
               </div>
             </>
@@ -356,28 +402,60 @@ const Products = () => {
 
           {/* Pagination */}
           {!loading && products.length > 0 && (
-            <div className="flex justify-center mt-10 gap-4">
+            <div className="flex justify-center mt-16 gap-3">
               <button
                 onClick={() => setPageNumber(pageNumber - 1)}
                 disabled={pageNumber === 1}
-                className="px-4 py-2 bg-black text-white rounded disabled:bg-gray-300 disabled:cursor-not-allowed"
+                className="px-6 py-2.5 bg-white border border-gray-300 rounded-xl shadow-sm hover:shadow-md transition disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium"
               >
-                Prev
+                ← Previous
               </button>
-              <span className="px-4 py-2">Page {pageNumber}</span>
+              <span className="px-5 py-2.5 bg-slate-900 text-white rounded-xl shadow-md font-semibold text-sm">
+                Page {pageNumber}
+              </span>
               <button
                 onClick={() => setPageNumber(pageNumber + 1)}
                 disabled={!hasMore}
-                className={`px-4 py-2 rounded ${
-                  hasMore ? "bg-black text-white" : "bg-gray-300 text-gray-500 cursor-not-allowed"
-                }`}
+                className="px-6 py-2.5 bg-white border border-gray-300 rounded-xl shadow-sm hover:shadow-md transition disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium"
               >
-                Next
+                Next →
               </button>
             </div>
           )}
         </div>
       </section>
+
+      {/* Back to Top */}
+      {showBackToTop && (
+        <button
+          onClick={scrollToTop}
+          className="fixed bottom-6 right-6 bg-slate-900 text-white p-3 rounded-full shadow-lg hover:bg-slate-800 transition-all transform hover:scale-110 z-50"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+          </svg>
+        </button>
+      )}
+
+      <style jsx>{`
+        @keyframes fadeInUp {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fadeInUp {
+          animation: fadeInUp 0.5s ease forwards;
+          opacity: 0;
+        }
+        /* Hide scrollbar for Chrome, Safari and Opera */
+        .hide-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        /* Hide scrollbar for IE, Edge and Firefox */
+        .hide-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+      `}</style>
     </div>
   );
 };
